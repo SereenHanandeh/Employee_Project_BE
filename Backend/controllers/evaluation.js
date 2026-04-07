@@ -11,9 +11,11 @@ exports.createEvaluation = async (req, res) => {
       personality = {},
       relations = {},
       notes = "",
+      from_date,
+      to_date,
     } = req.body;
 
-    // 🔥 حماية من undefined
+    // حماية من undefined
     performance = performance || {};
     personality = personality || {};
     relations = relations || {};
@@ -23,26 +25,24 @@ exports.createEvaluation = async (req, res) => {
     // =========================
     const totalPerformance = Object.values(performance).reduce(
       (a, b) => a + Number(b || 0),
-      0,
+      0
     );
 
     const totalPersonality = Object.values(personality).reduce(
       (a, b) => a + Number(b || 0),
-      0,
+      0
     );
 
     const totalRelations = Object.values(relations).reduce(
       (a, b) => a + Number(b || 0),
-      0,
+      0
     );
 
     // =========================
     // المجموع النهائي
     // =========================
     const total = totalPerformance + totalPersonality + totalRelations;
-
     const maxTotal = 100;
-
     const percentage = (total / maxTotal) * 100;
 
     // =========================
@@ -54,15 +54,16 @@ exports.createEvaluation = async (req, res) => {
     else if (percentage >= 60) grade = "جيد";
 
     // =========================
-    // INSERT DB
+    // INSERT DB مع RETURNING *
     // =========================
     const result = await pool.query(
       `
       INSERT INTO evaluations
-(employee_id, performance, personality, relations,
- performance_details, personality_details, relations_details,
- total, percentage, grade, notes, from_date, to_date)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+        (employee_id, performance, personality, relations,
+         performance_details, personality_details, relations_details,
+         total, percentage, grade, notes, from_date, to_date)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+      RETURNING *
       `,
       [
         employee_id,
@@ -76,9 +77,12 @@ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
         percentage,
         grade,
         notes,
-      ],
+        from_date, // الآن تمرر القيمتين
+        to_date,
+      ]
     );
 
+    // إعادة الصف المضاف مباشرة
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
