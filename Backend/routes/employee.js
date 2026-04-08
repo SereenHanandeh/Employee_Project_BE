@@ -26,8 +26,8 @@ employeerouter.delete("/:id/delete", auth, isAdmin, deleteEmployee);
 
 employeerouter.put("/:id/update", auth, isAdmin, updateEmployee);
 
-employeerouter.post("/:id/restore", auth, isAdmin, restoreEmployee);
-employeerouter.post("/deleted", auth, isAdmin, getDeletedEmployees);
+employeerouter.put("/:id/restore", auth, isAdmin, restoreEmployee);
+employeerouter.delete("/deleted", auth, isAdmin, getDeletedEmployees);
 
 
 module.exports = employeerouter;
