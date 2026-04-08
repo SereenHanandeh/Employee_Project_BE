@@ -50,10 +50,19 @@ exports.createEmployee = async (req, res) => {
 exports.getEmployees = async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT employee_id, name, email, department, position, role
-       FROM employees
-       WHERE is_deleted=0
-       ORDER BY employee_id DESC`,
+      `SELECT 
+  employee_id,
+  name,
+  email,
+  department,
+  position,
+  role,
+  CASE 
+    WHEN is_deleted = 1 THEN 'deleted'
+    ELSE 'active'
+  END AS status
+FROM employees
+ORDER BY employee_id DESC`,
     );
 
     res.json(result.rows);
@@ -130,14 +139,13 @@ exports.updateEmployee = async (req, res) => {
   }
 };
 
-
 exports.getMe = async (req, res) => {
   try {
     const employeeId = req.user.id;
 
     const result = await pool.query(
       "SELECT employee_id, name, email FROM employees WHERE employee_id = $1",
-      [employeeId]
+      [employeeId],
     );
 
     if (result.rows.length === 0) {
@@ -148,5 +156,44 @@ exports.getMe = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+exports.restoreEmployee = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await pool.query(
+      `UPDATE employees SET is_deleted=0 WHERE employee_id=$1`,
+      [id]
+    );
+
+    res.json({ message: "Employee Restored" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Restore Error" });
+  }
+};
+
+
+exports.getDeletedEmployees = async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT 
+        employee_id,
+        name,
+        email,
+        department,
+        position,
+        role
+       FROM employees
+       WHERE is_deleted=1
+       ORDER BY employee_id DESC`
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ message: "Fetch Deleted Error" });
   }
 };
