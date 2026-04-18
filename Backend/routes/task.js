@@ -8,12 +8,12 @@ const {
 const auth = require("../middleware/auth");
 
 // Admin
-router.post("/", auth, createTask);
+taskRouter.post("/", auth, createTask);
 
 // الجميع
-router.get("/", auth, getTasks);
+taskRouter.get("/", auth, getTasks);
 
 // اختيار الموظف للتاسك
-router.post("/assign", auth, assignTask);
+taskRouter.post("/assign", auth, assignTask);
 
 module.exports = taskRouter;
