@@ -69,6 +69,20 @@ const createTables = async () => {
     created_at TIMESTAMP DEFAULT NOW()
   );
 
+  CREATE TABLE IF NOT EXISTS tasks (
+  task_id SERIAL PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  description TEXT,
+  created_by INT REFERENCES admins(admin_id),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS employee_tasks (
+  id SERIAL PRIMARY KEY,
+  employee_id INT REFERENCES employees(employee_id) ON DELETE CASCADE,
+  task_id INT REFERENCES tasks(task_id) ON DELETE CASCADE,
+  status VARCHAR(50) DEFAULT 'pending',
+  selected_at TIMESTAMP DEFAULT NOW()
+);
   `;
 
   try {
