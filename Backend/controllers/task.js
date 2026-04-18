@@ -1,4 +1,4 @@
-const { pool } = require("../config/db");
+const { pool } = require("../models/db");
 
 /* ============================= */
 /*        CREATE TASK (ADMIN)    */
