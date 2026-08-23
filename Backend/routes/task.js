@@ -23,14 +23,14 @@ taskRouter.put("/:id", auth, updateTask);
 // حذف مهمة
 taskRouter.delete("/:id", auth, deleteTask);
 
+// تعيين مهمة لموظف محدد
+taskRouter.post("/assign", auth, assignTask);
+
 // =============================
 // EVERYONE
 // =============================
 
 // عرض المهام
 taskRouter.get("/", auth, getTasks);
-
-// اختيار الموظف للمهمة
-taskRouter.post("/assign", auth, assignTask);
 
 module.exports = taskRouter;
