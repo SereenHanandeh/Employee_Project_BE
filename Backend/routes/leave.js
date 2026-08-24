@@ -1,19 +1,51 @@
 const leaveRouter = require("express").Router();
+
 const {
   createLeave,
   getLeaves,
-  updateLeaveStatus,
-  updateLeave,
   getMyLeaves,
+  updateLeave,
+  updateLeaveStatus,
 } = require("../controllers/leave");
-const isAdmin = require("../middleware/isAdmin");
+
 const auth = require("../middleware/auth");
+const uploadLeave = require("../middleware/uploadLeave");
 
-leaveRouter.post("/", auth, createLeave);
-leaveRouter.get("/", auth, getLeaves);
-leaveRouter.get("/my-leaves", auth, getMyLeaves);
-leaveRouter.put("/edit/:id",auth, isAdmin, updateLeave);
-leaveRouter.put("/:id", auth, isAdmin, updateLeaveStatus);
+// إنشاء طلب إجازة + صورة
+leaveRouter.post(
+  "/",
+  auth,
+  uploadLeave.single("attachment"),
+  createLeave
+);
 
+// جميع الإجازات - للأدمن
+leaveRouter.get(
+  "/",
+  auth,
+  getLeaves
+);
+
+// إجازات الموظف الحالي فقط
+leaveRouter.get(
+  "/my-leaves",
+  auth,
+  getMyLeaves
+);
+
+// تعديل الإجازة + إمكانية تغيير الصورة
+leaveRouter.put(
+  "/:id",
+  auth,
+  uploadLeave.single("attachment"),
+  updateLeave
+);
+
+// تغيير الحالة
+leaveRouter.put(
+  "/:id/status",
+  auth,
+  updateLeaveStatus
+);
 
 module.exports = leaveRouter;
