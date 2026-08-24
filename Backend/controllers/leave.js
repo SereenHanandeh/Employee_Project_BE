@@ -447,11 +447,20 @@ exports.updateLeaveStatus = async (req, res) => {
 
     res.json(result.rows[0]);
 
-  } catch (err) {
-    console.error("UPDATE LEAVE STATUS ERROR:", err);
+   } catch (err) {
+  console.error("=================================");
+  console.error("CREATE LEAVE ERROR");
+  console.error("MESSAGE:", err.message);
+  console.error("CODE:", err.code);
+  console.error("DETAIL:", err.detail);
+  console.error("STACK:", err.stack);
+  console.error("=================================");
 
-    res.status(500).json({
-      message: "حدث خطأ أثناء تحديث حالة الإجازة",
-    });
-  }
+  res.status(500).json({
+    message: "حدث خطأ أثناء إنشاء طلب الإجازة",
+    error: err.message,
+    code: err.code,
+    detail: err.detail,
+  });
+}
 };
