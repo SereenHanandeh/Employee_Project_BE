@@ -4,8 +4,11 @@ const fs = require("fs");
 
 const uploadDir = path.join(__dirname, "../uploads/leaves");
 
+// إنشاء المجلد إذا لم يكن موجودًا
 if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+  fs.mkdirSync(uploadDir, {
+    recursive: true,
+  });
 }
 
 const storage = multer.diskStorage({
@@ -16,9 +19,9 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
 
-    const fileName = `leave-${Date.now()}-${Math.round(
-      Math.random() * 1e9
-    )}${ext}`;
+    const fileName =
+      `leave-${Date.now()}-${Math.round(Math.random() * 1e9)}` +
+      ext;
 
     cb(null, fileName);
   },
@@ -27,16 +30,18 @@ const storage = multer.diskStorage({
 const fileFilter = (req, file, cb) => {
   const allowedTypes = [
     "image/jpeg",
-    "image/jpg",
     "image/png",
-    "image/webp",
+    "image/jpg",
+    "application/pdf",
   ];
 
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
     cb(
-      new Error("يسمح فقط برفع صور JPG و PNG و WEBP"),
+      new Error(
+        "يسمح فقط برفع JPG أو PNG أو PDF"
+      ),
       false
     );
   }
@@ -44,10 +49,12 @@ const fileFilter = (req, file, cb) => {
 
 const uploadLeave = multer({
   storage,
-  fileFilter,
+
   limits: {
     fileSize: 5 * 1024 * 1024,
   },
+
+  fileFilter,
 });
 
 module.exports = uploadLeave;

@@ -60,13 +60,15 @@ const createTables = async () => {
 
   CREATE TABLE IF NOT EXISTS leaves(
     leave_id SERIAL PRIMARY KEY,
-    employee_id INT REFERENCES employees(employee_id) ON DELETE CASCADE,
-    type VARCHAR(50),
+    employee_id INTEGER NOT NULL,
+    type VARCHAR(50) NOT NULL,
     from_date DATE NOT NULL,
     to_date DATE NOT NULL,
-    days INT,
+    days INTEGER NOT NULL,
     notes TEXT,
-    created_at TIMESTAMP DEFAULT NOW()
+    attachment TEXT,
+    status VARCHAR(20) DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
 
   CREATE TABLE IF NOT EXISTS tasks (
