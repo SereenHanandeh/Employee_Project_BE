@@ -35,18 +35,91 @@ exports.createTask = async (req, res) => {
 /* ============================= */
 /*        GET ALL TASKS          */
 /* ============================= */
+/* ============================= */
+/* GET TASKS                     */
+/* ADMIN = ALL TASKS             */
+/* EMPLOYEE = ASSIGNED TASKS     */
+/* ============================= */
 
 exports.getTasks = async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT *
-       FROM tasks
-       ORDER BY task_id DESC`
-    );
+    // =============================
+    // ADMIN
+    // =============================
 
-    res.json(result.rows);
+    if (req.user?.role === "admin") {
+      const result = await pool.query(`
+        SELECT *
+        FROM tasks
+        ORDER BY task_id DESC
+      `);
+
+      return res.json(result.rows);
+    }
+
+    // =============================
+    // EMPLOYEE
+    // =============================
+
+    if (req.user?.role === "employee") {
+      let employeeId = req.user.employee_id;
+
+      // إذا لم يكن employee_id موجوداً داخل التوكن
+      // نحاول إيجاده عن طريق email
+      if (!employeeId && req.user.email) {
+        const employee = await pool.query(
+          `
+          SELECT id
+          FROM employees
+          WHERE email = $1
+          `,
+          [req.user.email]
+        );
+
+        if (employee.rows.length === 0) {
+          return res.status(404).json({
+            message: "الموظف غير موجود",
+          });
+        }
+
+        employeeId = employee.rows[0].id;
+      }
+
+      if (!employeeId) {
+        return res.status(400).json({
+          message: "لم يتم العثور على الموظف الحالي",
+        });
+      }
+
+      const result = await pool.query(
+        `
+        SELECT
+          et.employee_task_id,
+          et.employee_id,
+          et.task_id,
+          t.title,
+          t.description
+        FROM employee_tasks et
+
+        INNER JOIN tasks t
+          ON t.task_id = et.task_id
+
+        WHERE et.employee_id = $1
+
+        ORDER BY et.employee_task_id DESC
+        `,
+        [employeeId]
+      );
+
+      return res.json(result.rows);
+    }
+
+    return res.status(403).json({
+      message: "غير مسموح",
+    });
+
   } catch (err) {
-    console.error(err);
+    console.error("Get Tasks Error:", err);
 
     res.status(500).json({
       message: "Fetch Tasks Error",
