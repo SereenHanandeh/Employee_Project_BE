@@ -160,25 +160,60 @@ exports.getEmployees = async (req, res) => {
 
 exports.assignTask = async (req, res) => {
   try {
-    // التأكد أن المستخدم Admin
+    // =====================================================
+    // CHECK ADMIN
+    // =====================================================
     if (req.user?.role !== "admin") {
       return res.status(403).json({
         message: "غير مسموح، هذه العملية للأدمن فقط",
       });
     }
 
+    // =====================================================
+    // GET DATA
+    // =====================================================
     const { employee_id, task_id } = req.body;
 
-    if (!employee_id || !task_id) {
+    console.log("ASSIGN TASK REQUEST:", {
+      employee_id,
+      task_id,
+      body: req.body,
+    });
+
+    // =====================================================
+    // VALIDATE VALUES
+    // =====================================================
+    const employeeId = Number(employee_id);
+    const taskId = Number(task_id);
+
+    if (
+      !Number.isInteger(employeeId) ||
+      employeeId <= 0
+    ) {
       return res.status(400).json({
-        message: "employee_id و task_id مطلوبان",
+        message: "employee_id مطلوب ويجب أن يكون رقمًا صحيحًا",
       });
     }
 
-    // التأكد أن الموظف موجود
+    if (
+      !Number.isInteger(taskId) ||
+      taskId <= 0
+    ) {
+      return res.status(400).json({
+        message: "task_id مطلوب ويجب أن يكون رقمًا صحيحًا",
+      });
+    }
+
+    // =====================================================
+    // CHECK EMPLOYEE
+    // =====================================================
     const employee = await pool.query(
-      `SELECT id FROM employees WHERE id = $1`,
-      [employee_id]
+      `
+      SELECT id
+      FROM employees
+      WHERE id = $1
+      `,
+      [employeeId]
     );
 
     if (employee.rows.length === 0) {
@@ -187,10 +222,16 @@ exports.assignTask = async (req, res) => {
       });
     }
 
-    // التأكد أن المهمة موجودة
+    // =====================================================
+    // CHECK TASK
+    // =====================================================
     const task = await pool.query(
-      `SELECT task_id FROM tasks WHERE task_id = $1`,
-      [task_id]
+      `
+      SELECT task_id, employee_id
+      FROM tasks
+      WHERE task_id = $1
+      `,
+      [taskId]
     );
 
     if (task.rows.length === 0) {
@@ -199,35 +240,44 @@ exports.assignTask = async (req, res) => {
       });
     }
 
-    // منع تكرار نفس المهمة لنفس الموظف
-    const existing = await pool.query(
-      `SELECT *
-       FROM employee_tasks
-       WHERE employee_id = $1
-       AND task_id = $2`,
-      [employee_id, task_id]
-    );
-
-    if (existing.rows.length > 0) {
+    // =====================================================
+    // SAME EMPLOYEE
+    // =====================================================
+    if (
+      task.rows[0].employee_id !== null &&
+      Number(task.rows[0].employee_id) === employeeId
+    ) {
       return res.status(400).json({
         message: "هذه المهمة معينة بالفعل لهذا الموظف",
       });
     }
 
+    // =====================================================
+    // UPDATE TASK
+    // =====================================================
     const result = await pool.query(
-      `INSERT INTO employee_tasks (employee_id, task_id)
-       VALUES ($1, $2)
-       RETURNING *`,
-      [employee_id, task_id]
+      `
+      UPDATE tasks
+      SET employee_id = $1
+      WHERE task_id = $2
+      RETURNING *
+      `,
+      [employeeId, taskId]
     );
 
-    res.status(201).json(result.rows[0]);
+    return res.status(200).json({
+      message: "تم تعيين المهمة بنجاح",
+      task: result.rows[0],
+    });
 
   } catch (err) {
-    console.error(err);
+    console.error(
+      "ASSIGN TASK ERROR:",
+      err
+    );
 
-    res.status(500).json({
-      message: "Assign Error",
+    return res.status(500).json({
+      message: "حدث خطأ أثناء تعيين المهمة",
     });
   }
 };

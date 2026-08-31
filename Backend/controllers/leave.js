@@ -1,232 +1,94 @@
 const { pool } = require("../models/db");
 
-// =====================================================
-// CREATE LEAVE
-// =====================================================
-
+/* ============================= */
+/*        CREATE LEAVE           */
+/* ============================= */
 exports.createLeave = async (req, res) => {
   try {
-    const {
-      employee_id,
-      type,
-      from_date,
-      to_date,
-      notes,
-    } = req.body;
-
-    // =============================
-    // VALIDATION
-    // =============================
-
-    if (!type) {
-      return res.status(400).json({
-        message: "نوع الإجازة مطلوب",
-      });
-    }
-
-    if (!from_date || !to_date) {
-      return res.status(400).json({
-        message: "تاريخ بداية ونهاية الإجازة مطلوبان",
-      });
-    }
+    const { employee_id, type, from_date, to_date, notes } = req.body;
 
     const from = new Date(from_date);
     const to = new Date(to_date);
 
-    if (
-      Number.isNaN(from.getTime()) ||
-      Number.isNaN(to.getTime())
-    ) {
-      return res.status(400).json({
-        message: "التاريخ غير صحيح",
-      });
-    }
-
     if (to < from) {
       return res.status(400).json({
-        message:
-          "تاريخ نهاية الإجازة يجب أن يكون بعد أو مساويًا لتاريخ البداية",
+        message: "To date must be greater than or equal from date",
       });
     }
 
-    // =============================
-    // EMPLOYEE ID
-    // =============================
-
-    let finalEmployeeId = employee_id;
-
-    // الموظف لا يستطيع اختيار موظف آخر
-    if (req.user?.role !== "admin") {
-      finalEmployeeId = req.user?.employee_id;
-    }
-
-    if (!finalEmployeeId) {
-      return res.status(400).json({
-        message: "لم يتم تحديد الموظف",
-      });
-    }
-
-    // =============================
-    // CALCULATE DAYS
-    // =============================
-
+    // ✅ حساب الأيام بشكل صحيح
     const days =
-      Math.floor(
-        (
-          Date.UTC(
-            to.getFullYear(),
-            to.getMonth(),
-            to.getDate()
-          ) -
-          Date.UTC(
-            from.getFullYear(),
-            from.getMonth(),
-            from.getDate()
-          )
-        ) /
-          (1000 * 60 * 60 * 24)
-      ) + 1;
-
-    // =============================
-    // ATTACHMENT
-    // =============================
-
-    let attachment = null;
-
-    if (req.file) {
-      attachment = `/uploads/leaves/${req.file.filename}`;
-    }
-
-    // =============================
-    // INSERT
-    // =============================
+      Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
     const result = await pool.query(
-      `
-      INSERT INTO leaves
-      (
-        employee_id,
-        type,
-        from_date,
-        to_date,
-        days,
-        notes,
-        attachment,
-        status
-      )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,'pending')
-      RETURNING *
-      `,
-      [
-        finalEmployeeId,
-        type,
-        from_date,
-        to_date,
-        days,
-        notes?.trim() || null,
-        attachment,
-      ]
+      `INSERT INTO leaves
+       (employee_id, type, from_date, to_date, days, notes, status)
+       VALUES ($1,$2,$3,$4,$5,$6,'pending')
+       RETURNING *`,
+      [employee_id, type, from_date, to_date, days, notes]
     );
 
-    return res.status(201).json({
-      message: "تم إنشاء طلب الإجازة بنجاح",
-      leave: result.rows[0],
-    });
-
+    res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error("CREATE LEAVE ERROR:", err);
-
-    return res.status(500).json({
-      message: "حدث خطأ أثناء إنشاء طلب الإجازة",
-    });
+    console.error(err);
+    res.status(500).json({ message: "Create Leave Error" });
   }
 };
 
-
-// =====================================================
-// GET ALL LEAVES
-// =====================================================
-
+/* ============================= */
+/*          GET LEAVES           */
+/* ============================= */
 exports.getLeaves = async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT
-        l.*,
-        emp.name AS employee_name
+      SELECT l.*, emp.name
       FROM leaves l
       JOIN employees emp
-        ON l.employee_id = emp.employee_id
+      ON l.employee_id = emp.employee_id
       ORDER BY l.leave_id DESC
     `);
 
-    return res.json(result.rows);
-
+    res.json(result.rows);
   } catch (err) {
-    console.error("GET LEAVES ERROR:", err);
-
-    return res.status(500).json({
-      message: "حدث خطأ أثناء جلب الإجازات",
-    });
+    console.error(err);
+    res.status(500).json({ message: "Fetch Leaves Error" });
   }
 };
 
-
-// =====================================================
-// GET MY LEAVES
-// =====================================================
-
+/* ============================= */
+/*       GET MY LEAVES          */
+/* ============================= */
 exports.getMyLeaves = async (req, res) => {
   try {
+    const userId = req.user?.id;
 
-    const employeeId = req.user?.employee_id;
-
-    if (!employeeId) {
-      return res.status(401).json({
-        message: "لم يتم تحديد الموظف",
-      });
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
     const result = await pool.query(
-      `
-      SELECT
-        leave_id,
-        employee_id,
-        type,
-        from_date,
-        to_date,
-        days,
-        notes,
-        attachment,
-        status,
-        created_at
-      FROM leaves
-      WHERE employee_id = $1
-      ORDER BY leave_id DESC
-      `,
-      [employeeId]
+      `SELECT leave_id, type, from_date, to_date, days, status
+       FROM leaves
+       WHERE employee_id=$1
+       ORDER BY leave_id DESC`,
+      [userId]
     );
 
-    return res.json(result.rows);
-
+    res.json(result.rows);
   } catch (err) {
-    console.error("GET MY LEAVES ERROR:", err);
-
-    return res.status(500).json({
-      message: "حدث خطأ أثناء جلب إجازات الموظف",
-    });
+    console.error(err);
+    res.status(500).json({ message: "Fetch My Leaves Error" });
   }
 };
 
 
-// =====================================================
-// UPDATE LEAVE
-// =====================================================
+/* ============================= */
+/*        UPDATE LEAVE           */
+/* ============================= */
 
 exports.updateLeave = async (req, res) => {
   try {
-
     const { id } = req.params;
-
     const {
       type,
       from_date,
@@ -234,14 +96,9 @@ exports.updateLeave = async (req, res) => {
       notes,
     } = req.body;
 
-    // =============================
-    // VALIDATION
-    // =============================
-
     if (!type || !from_date || !to_date) {
       return res.status(400).json({
-        message:
-          "نوع الإجازة وتاريخ البداية والنهاية مطلوبة",
+        message: "Type, from date and to date are required",
       });
     }
 
@@ -253,171 +110,87 @@ exports.updateLeave = async (req, res) => {
       Number.isNaN(to.getTime())
     ) {
       return res.status(400).json({
-        message: "التاريخ غير صحيح",
+        message: "Invalid date",
       });
     }
 
     if (to < from) {
       return res.status(400).json({
-        message:
-          "تاريخ نهاية الإجازة يجب أن يكون بعد أو مساويًا لتاريخ البداية",
+        message: "To date must be greater than or equal from date",
       });
     }
 
-    // =============================
-    // CALCULATE DAYS
-    // =============================
-
     const days =
-      Math.floor(
-        (
-          Date.UTC(
-            to.getFullYear(),
-            to.getMonth(),
-            to.getDate()
-          ) -
-          Date.UTC(
-            from.getFullYear(),
-            from.getMonth(),
-            from.getDate()
-          )
-        ) /
+      Math.ceil(
+        (to.getTime() - from.getTime()) /
           (1000 * 60 * 60 * 24)
       ) + 1;
 
-    // =============================
-    // OLD ATTACHMENT
-    // =============================
-
-    const oldLeave = await pool.query(
-      `
-      SELECT attachment
-      FROM leaves
-      WHERE leave_id = $1
-      `,
-      [id]
-    );
-
-    if (oldLeave.rows.length === 0) {
-      return res.status(404).json({
-        message: "طلب الإجازة غير موجود",
-      });
-    }
-
-    let attachment =
-      oldLeave.rows[0].attachment || null;
-
-    // إذا تم رفع ملف جديد
-    if (req.file) {
-      attachment = `/uploads/leaves/${req.file.filename}`;
-    }
-
-    // =============================
-    // UPDATE
-    // =============================
-
     const result = await pool.query(
-      `
-      UPDATE leaves
-      SET
-        type = $1,
-        from_date = $2,
-        to_date = $3,
-        days = $4,
-        notes = $5,
-        attachment = $6
-      WHERE leave_id = $7
-      RETURNING *
-      `,
+      `UPDATE leaves
+       SET
+         type = $1,
+         from_date = $2,
+         to_date = $3,
+         days = $4,
+         notes = $5
+       WHERE leave_id = $6
+       RETURNING *`,
       [
         type,
         from_date,
         to_date,
         days,
-        notes?.trim() || null,
-        attachment,
-        id,
-      ]
-    );
-
-    return res.json({
-      message: "تم تعديل طلب الإجازة بنجاح",
-      leave: result.rows[0],
-    });
-
-  } catch (err) {
-    console.error("UPDATE LEAVE ERROR:", err);
-
-    return res.status(500).json({
-      message: "حدث خطأ أثناء تعديل طلب الإجازة",
-    });
-  }
-};
-
-
-// =====================================================
-// UPDATE LEAVE STATUS
-// =====================================================
-
-exports.updateLeaveStatus = async (req, res) => {
-  try {
-
-    const { id } = req.params;
-    const { status } = req.body;
-
-    // =============================
-    // VALID STATUS
-    // =============================
-
-    const allowedStatuses = [
-      "pending",
-      "approved",
-      "rejected",
-    ];
-
-    if (!allowedStatuses.includes(status)) {
-      return res.status(400).json({
-        message: "حالة الإجازة غير صحيحة",
-      });
-    }
-
-    // =============================
-    // UPDATE
-    // =============================
-
-    const result = await pool.query(
-      `
-      UPDATE leaves
-      SET status = $1
-      WHERE leave_id = $2
-      RETURNING *
-      `,
-      [
-        status,
+        notes || null,
         id,
       ]
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({
-        message: "طلب الإجازة غير موجود",
+        message: "Leave not found",
       });
     }
 
-    return res.json({
-      message: "تم تحديث حالة الإجازة بنجاح",
-      leave: result.rows[0],
-    });
-
+    res.json(result.rows[0]);
   } catch (err) {
-    console.error(
-      "UPDATE LEAVE STATUS ERROR:",
-      err
+    console.error(err);
+
+    res.status(500).json({
+      message: "Update Leave Error",
+    });
+  }
+};
+
+/* ============================= */
+/*     UPDATE LEAVE STATUS      */
+/* ============================= */
+exports.updateLeaveStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    // ❌ validate status
+    const allowed = ["pending", "approved", "rejected"];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
+    }
+
+    const result = await pool.query(
+      `UPDATE leaves
+       SET status=$1
+       WHERE leave_id=$2
+       RETURNING *`,
+      [status, id]
     );
 
-    return res.status(500).json({
-      message:
-        "حدث خطأ أثناء تحديث حالة الإجازة",
-    });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Leave not found" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Update Status Error" });
   }
 };

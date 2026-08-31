@@ -1,66 +1,19 @@
 const leaveRouter = require("express").Router();
-
-const auth = require("../middleware/auth");
-const uploadLeave = require("../middleware/uploadLeave");
-
 const {
   createLeave,
   getLeaves,
-  getMyLeaves,
-  updateLeave,
   updateLeaveStatus,
+  updateLeave,
+  getMyLeaves,
 } = require("../controllers/leave");
+const isAdmin = require("../middleware/isAdmin");
+const auth = require("../middleware/auth");
 
-// =============================
-// GET MY LEAVES
-// =============================
+leaveRouter.post("/", auth, createLeave);
+leaveRouter.get("/", auth, getLeaves);
+leaveRouter.get("/my-leaves", auth, getMyLeaves);
+leaveRouter.put("/edit/:id",auth, isAdmin, updateLeave);
+leaveRouter.put("/:id", auth, isAdmin, updateLeaveStatus);
 
-leaveRouter.get(
-  "/my",
-  auth,
-  getMyLeaves
-);
-
-// =============================
-// GET ALL LEAVES
-// =============================
-
-leaveRouter.get(
-  "/",
-  auth,
-  getLeaves
-);
-
-// =============================
-// CREATE LEAVE
-// =============================
-
-leaveRouter.post(
-  "/",
-  auth,
-  uploadLeave.single("attachment"),
-  createLeave
-);
-
-// =============================
-// UPDATE LEAVE
-// =============================
-
-leaveRouter.put(
-  "/:id",
-  auth,
-  uploadLeave.single("attachment"),
-  updateLeave
-);
-
-// =============================
-// UPDATE LEAVE STATUS
-// =============================
-
-leaveRouter.put(
-  "/:id/status",
-  auth,
-  updateLeaveStatus
-);
 
 module.exports = leaveRouter;

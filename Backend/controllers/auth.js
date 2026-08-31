@@ -23,16 +23,22 @@ exports.login = async (req, res) => {
 
     email = email.trim().toLowerCase();
 
-    // 👇 البحث في employees
+    // =============================
+    // SEARCH EMPLOYEE
+    // =============================
+
     const empResult = await pool.query(
       "SELECT * FROM employees WHERE email = $1",
-      [email],
+      [email]
     );
 
-    // 👇 البحث في admins
+    // =============================
+    // SEARCH ADMIN
+    // =============================
+
     const adminResult = await pool.query(
       "SELECT * FROM admins WHERE email = $1",
-      [email],
+      [email]
     );
 
     let user = null;
@@ -46,45 +52,85 @@ exports.login = async (req, res) => {
       role = "admin";
     }
 
-    // ❌ لم يتم العثور على المستخدم
+    // =============================
+    // USER NOT FOUND
+    // =============================
+
     if (!user) {
-      return res.status(400).json({ message: "Invalid email" });
+      return res.status(400).json({
+        message: "Invalid email",
+      });
     }
 
-    console.log("USER FOUND:", user);
+    // =============================
+    // PASSWORD
+    // =============================
 
-    console.log("EMAIL:", email);
-
-    console.log("EMP RESULT:", empResult.rows);
-    console.log("ADMIN RESULT:", adminResult.rows);
-    // 🔐 تحقق كلمة المرور (bcrypt)
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await bcrypt.compare(
+      password,
+      user.password
+    );
 
     if (!isMatch) {
-      return res.status(400).json({ message: "Invalid password" });
+      return res.status(400).json({
+        message: "Invalid password",
+      });
     }
-    console.log("PASSWORD INPUT:", password);
-    console.log("HASH IN DB:", user.password);
+
+    // =============================
+    // JWT
+    // =============================
+
     const token = jwt.sign(
       {
-        id: user.admin_id || user.employee_id,
+        id:
+          user.admin_id ||
+          user.employee_id,
+
+        employee_id:
+          user.employee_id || null,
+
+        admin_id:
+          user.admin_id || null,
+
         role,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "1d" },
+      {
+        expiresIn: "1d",
+      }
     );
+
+    // =============================
+    // RESPONSE
+    // =============================
 
     return res.json({
       token,
+
       user: {
-        id: user.admin_id || user.employee_id,
+        id:
+          user.admin_id ||
+          user.employee_id,
+
+        employee_id:
+          user.employee_id || null,
+
+        admin_id:
+          user.admin_id || null,
+
         email: user.email,
+
         role,
       },
     });
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+    console.error("LOGIN ERROR:", err);
+
+    return res.status(500).json({
+      message: "Server error",
+    });
   }
 };
 
