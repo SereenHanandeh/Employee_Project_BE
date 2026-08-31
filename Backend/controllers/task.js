@@ -157,88 +157,69 @@ exports.getEmployees = async (req, res) => {
 /* ============================= */
 /*   ASSIGN TASK TO EMPLOYEE     */
 /* ============================= */
-
 exports.assignTask = async (req, res) => {
   try {
     console.log("====================================");
-    console.log("ASSIGN TASK REQUEST");
+    console.log("ASSIGN TASK");
     console.log("BODY:", req.body);
     console.log("USER:", req.user);
-    console.log("====================================");
 
-    // ==========================================
-    // التأكد أن المستخدم Admin
-    // ==========================================
+    // ================================
+    // التأكد من أن المستخدم Admin
+    // ================================
     if (req.user?.role !== "admin") {
       return res.status(403).json({
         message: "غير مسموح، هذه العملية للأدمن فقط",
       });
     }
 
-    // ==========================================
+    // ================================
     // استقبال البيانات
-    // ==========================================
+    // ================================
     const { employee_id, task_id } = req.body;
 
     console.log("employee_id:", employee_id);
     console.log("task_id:", task_id);
 
-    // ==========================================
-    // التحقق من وجود البيانات
-    // ==========================================
+    // ================================
+    // التحقق من البيانات
+    // ================================
     if (
       employee_id === undefined ||
       employee_id === null ||
-      employee_id === ""
-    ) {
-      return res.status(400).json({
-        message: "employee_id مطلوب",
-      });
-    }
-
-    if (
       task_id === undefined ||
-      task_id === null ||
-      task_id === ""
+      task_id === null
     ) {
       return res.status(400).json({
-        message: "task_id مطلوب",
+        message: "employee_id و task_id مطلوبان",
       });
     }
 
-    // ==========================================
-    // تحويل إلى أرقام
-    // ==========================================
     const employeeId = Number(employee_id);
     const taskId = Number(task_id);
 
-    if (!Number.isInteger(employeeId) || employeeId <= 0) {
+    if (
+      !Number.isInteger(employeeId) ||
+      !Number.isInteger(taskId)
+    ) {
       return res.status(400).json({
-        message: "employee_id غير صحيح",
+        message: "employee_id و task_id يجب أن يكونا أرقامًا صحيحة",
       });
     }
 
-    if (!Number.isInteger(taskId) || taskId <= 0) {
-      return res.status(400).json({
-        message: "task_id غير صحيح",
-      });
-    }
-
-    // ==========================================
+    // ================================
     // التأكد من وجود الموظف
-    // ==========================================
+    // ================================
+    // مهم:
+    // جدول employees عندك يستخدم employee_id
+    // وليس id
     const employeeResult = await pool.query(
       `
-      SELECT *
+      SELECT employee_id
       FROM employees
-      WHERE id = $1
+      WHERE employee_id = $1
       `,
       [employeeId]
-    );
-
-    console.log(
-      "EMPLOYEE RESULT:",
-      employeeResult.rows
     );
 
     if (employeeResult.rows.length === 0) {
@@ -247,21 +228,16 @@ exports.assignTask = async (req, res) => {
       });
     }
 
-    // ==========================================
+    // ================================
     // التأكد من وجود المهمة
-    // ==========================================
+    // ================================
     const taskResult = await pool.query(
       `
-      SELECT *
+      SELECT task_id
       FROM tasks
       WHERE task_id = $1
       `,
       [taskId]
-    );
-
-    console.log(
-      "TASK RESULT:",
-      taskResult.rows
     );
 
     if (taskResult.rows.length === 0) {
@@ -270,144 +246,68 @@ exports.assignTask = async (req, res) => {
       });
     }
 
-    // ==========================================
-    // هل المهمة مرتبطة بموظف من قبل؟
-    // ==========================================
+    // ================================
+    // التأكد من عدم وجود التعيين مسبقًا
+    // ================================
     const existingResult = await pool.query(
       `
       SELECT *
       FROM employee_tasks
-      WHERE task_id = $1
+      WHERE employee_id = $1
+        AND task_id = $2
       `,
-      [taskId]
+      [employeeId, taskId]
     );
 
-    console.log(
-      "EXISTING ASSIGNMENT:",
-      existingResult.rows
-    );
-
-    // ==========================================
-    // إذا كانت المهمة معينة مسبقًا
-    // ==========================================
     if (existingResult.rows.length > 0) {
-      const existing =
-        existingResult.rows[0];
-
-      // نفس الموظف
-      if (
-        Number(existing.employee_id) === employeeId
-      ) {
-        return res.status(400).json({
-          message:
-            "هذه المهمة معينة بالفعل لهذا الموظف",
-        });
-      }
-
-      // ========================================
-      // تغيير الموظف
-      // ========================================
-      const updateResult = await pool.query(
-        `
-        UPDATE employee_tasks
-        SET employee_id = $1
-        WHERE task_id = $2
-        RETURNING *
-        `,
-        [employeeId, taskId]
-      );
-
-      console.log(
-        "UPDATED ASSIGNMENT:",
-        updateResult.rows[0]
-      );
-
-      return res.status(200).json({
-        message:
-          "تم تغيير الموظف المسؤول عن المهمة بنجاح",
-        assignment:
-          updateResult.rows[0],
+      return res.status(400).json({
+        message: "هذه المهمة معينة بالفعل لهذا الموظف",
       });
     }
 
-    // ==========================================
-    // تعيين المهمة لأول مرة
-    // ==========================================
-    const insertResult = await pool.query(
+    // ================================
+    // إنشاء التعيين
+    // ================================
+    const result = await pool.query(
       `
       INSERT INTO employee_tasks
-      (employee_id, task_id)
-      VALUES ($1, $2)
+        (employee_id, task_id)
+      VALUES
+        ($1, $2)
       RETURNING *
       `,
       [employeeId, taskId]
     );
 
-    console.log(
-      "NEW ASSIGNMENT:",
-      insertResult.rows[0]
-    );
+    console.log("TASK ASSIGNED:", result.rows[0]);
+    console.log("====================================");
 
-    // ==========================================
-    // SUCCESS
-    // ==========================================
     return res.status(201).json({
-      message:
-        "تم تعيين المهمة للموظف بنجاح",
-      assignment:
-        insertResult.rows[0],
+      message: "تم تعيين المهمة بنجاح",
+      assignment: result.rows[0],
     });
+
   } catch (err) {
-    console.error(
-      "===================================="
-    );
-    console.error(
-      "ASSIGN TASK DATABASE ERROR"
-    );
-    console.error(
-      "MESSAGE:",
-      err.message
-    );
-    console.error(
-      "CODE:",
-      err.code
-    );
-    console.error(
-      "DETAIL:",
-      err.detail
-    );
-    console.error(
-      "HINT:",
-      err.hint
-    );
-    console.error(
-      "TABLE:",
-      err.table
-    );
-    console.error(
-      "COLUMN:",
-      err.column
-    );
-    console.error(
-      "CONSTRAINT:",
-      err.constraint
-    );
-    console.error(
-      "STACK:",
-      err.stack
-    );
-    console.error(
-      "===================================="
-    );
+    console.error("====================================");
+    console.error("ASSIGN TASK DATABASE ERROR");
+    console.error("MESSAGE:", err.message);
+    console.error("CODE:", err.code);
+    console.error("DETAIL:", err.detail);
+    console.error("HINT:", err.hint);
+    console.error("TABLE:", err.table);
+    console.error("COLUMN:", err.column);
+    console.error("CONSTRAINT:", err.constraint);
+    console.error("STACK:", err.stack);
+    console.error("====================================");
 
     return res.status(500).json({
-      message:
-        "حدث خطأ في قاعدة البيانات أثناء تعيين المهمة",
+      message: "حدث خطأ في قاعدة البيانات أثناء تعيين المهمة",
       error: err.message,
-      code: err.code,
     });
   }
 };
+
+
 
 /* ============================= */
 /* GET EMPLOYEE TASKS (ADMIN)    */
