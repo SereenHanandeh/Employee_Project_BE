@@ -199,3 +199,152 @@ exports.deleteEvaluation = async (req, res) => {
     res.status(500).json({ message: "Delete Evaluation Error" });
   }
 };
+
+/* ============================= */
+/*      UPDATE EVALUATION        */
+/* ============================= */
+
+exports.updateEvaluation = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    let {
+      employee_id,
+      performance = {},
+      personality = {},
+      relations = {},
+      notes = "",
+      from_date,
+      to_date,
+    } = req.body;
+
+    performance = performance || {};
+    personality = personality || {};
+    relations = relations || {};
+
+    // =========================
+    // التحقق من الموظف
+    // =========================
+
+    if (!employee_id) {
+      return res.status(400).json({
+        message: "employee_id مطلوب",
+      });
+    }
+
+    // =========================
+    // حساب المجموع
+    // =========================
+
+    const totalPerformance = Object.values(performance).reduce(
+      (sum, value) => sum + Number(value || 0),
+      0
+    );
+
+    const totalPersonality = Object.values(personality).reduce(
+      (sum, value) => sum + Number(value || 0),
+      0
+    );
+
+    const totalRelations = Object.values(relations).reduce(
+      (sum, value) => sum + Number(value || 0),
+      0
+    );
+
+    const total =
+      totalPerformance +
+      totalPersonality +
+      totalRelations;
+
+    const maxTotal = 100;
+
+    const percentage =
+      (total / maxTotal) * 100;
+
+    // =========================
+    // التقدير
+    // =========================
+
+    let grade = "ضعيف";
+
+    if (percentage >= 90) {
+      grade = "ممتاز";
+    } else if (percentage >= 75) {
+      grade = "جيد جدا";
+    } else if (percentage >= 60) {
+      grade = "جيد";
+    }
+
+    // =========================
+    // UPDATE
+    // =========================
+
+    const result = await pool.query(
+      `
+      UPDATE evaluations
+      SET
+        employee_id = $1,
+        performance = $2,
+        personality = $3,
+        relations = $4,
+
+        performance_details = $5,
+        personality_details = $6,
+        relations_details = $7,
+
+        total = $8,
+        percentage = $9,
+        grade = $10,
+        notes = $11,
+        from_date = $12,
+        to_date = $13
+
+      WHERE evaluation_id = $14
+
+      RETURNING *
+      `,
+      [
+        employee_id,
+        totalPerformance,
+        totalPersonality,
+        totalRelations,
+
+        performance,
+        personality,
+        relations,
+
+        total,
+        percentage,
+        grade,
+        notes,
+        from_date,
+        to_date,
+
+        id,
+      ]
+    );
+
+    // =========================
+    // NOT FOUND
+    // =========================
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "Evaluation not found",
+      });
+    }
+
+    // =========================
+    // RESPONSE
+    // =========================
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("UPDATE EVALUATION ERROR:", err);
+
+    res.status(500).json({
+      message: "Update Evaluation Error",
+      error: err.message,
+    });
+  }
+};
