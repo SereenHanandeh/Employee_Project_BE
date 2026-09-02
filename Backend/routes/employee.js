@@ -1,4 +1,4 @@
-const employeerouter = require("express").Router();
+const employeeRouter = require("express").Router();
 
 const {
   createEmployee,
@@ -7,27 +7,38 @@ const {
   updateEmployee,
   getMe,
   restoreEmployee,
-  getDeletedEmployees
+  getDeletedEmployees,
 } = require("../controllers/employee");
 
 const auth = require("../middleware/auth");
 const isAdmin = require("../middleware/isAdmin");
-employeerouter.get("/me",auth, getMe);
 
-// فقط الأدمن يضيف موظف
-employeerouter.post("/", auth, isAdmin, createEmployee);
+// ===============================
+// الموظف الحالي
+// Employee + Admin
+// ===============================
+employeeRouter.get("/me", auth, getMe);
 
+// ===============================
+// إدارة الموظفين - Admin Only
+// ===============================
 
-// الجميع بعد تسجيل الدخول يشوف الموظفين
-employeerouter.get("/", auth, getEmployees);
+// إضافة موظف
+employeeRouter.post("/", auth, isAdmin, createEmployee);
 
-// فقط الأدمن يحذف
-employeerouter.delete("/:id/delete", auth, isAdmin, deleteEmployee);
+// عرض جميع الموظفين
+employeeRouter.get("/", auth, isAdmin, getEmployees);
 
-employeerouter.put("/:id/update", auth, isAdmin, updateEmployee);
+// حذف موظف
+employeeRouter.delete("/:id/delete", auth, isAdmin, deleteEmployee);
 
-employeerouter.put("/:id/restore", auth, isAdmin, restoreEmployee);
-employeerouter.delete("/deleted", auth, isAdmin, getDeletedEmployees);
+// تعديل موظف
+employeeRouter.put("/:id/update", auth, isAdmin, updateEmployee);
 
+// استرجاع موظف محذوف
+employeeRouter.put("/:id/restore", auth, isAdmin, restoreEmployee);
 
-module.exports = employeerouter;
+// عرض الموظفين المحذوفين
+employeeRouter.get("/deleted", auth, isAdmin, getDeletedEmployees);
+
+module.exports = employeeRouter;

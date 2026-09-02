@@ -13,48 +13,82 @@ const app = express();
 app.use(cors());
 
 app.use(express.json());
+
 app.use(express.urlencoded({ extended: true }));
 
 // =============================
 // STATIC FILES
 // =============================
 
-// ملفات الصور والمرفقات
-app.use(
-  "/uploads",
-  express.static(
-    path.join(__dirname, "uploads")
-  )
-);
+app.use("/uploads", express.static("uploads"));
+
 
 // =============================
-// ROUTES
+// PUBLIC ROUTES
 // =============================
 
+// تسجيل الدخول فقط
 app.use(
   "/auth",
   require("./routes/auth")
 );
 
+// =============================
+// AUTH MIDDLEWARE
+// =============================
+
+const authMiddleware = require("./middleware/authMiddleware");
+
+// =============================
+// PROTECTED ROUTES
+// =============================
+
+// كل الـ routes التالية تحتاج JWT
 app.use(
   "/employees",
+  authMiddleware,
   require("./routes/employee")
 );
 
 app.use(
   "/evaluations",
+  authMiddleware,
   require("./routes/evaluation")
 );
 
 app.use(
   "/leaves",
+  authMiddleware,
   require("./routes/leave")
 );
 
 app.use(
   "/tasks",
+  authMiddleware,
   require("./routes/task")
 );
+
+// =============================
+// 404
+// =============================
+
+app.use((req, res) => {
+  res.status(404).json({
+    message: "Route not found",
+  });
+});
+
+// =============================
+// ERROR HANDLER
+// =============================
+
+app.use((err, req, res, next) => {
+  console.error("SERVER ERROR:", err);
+
+  res.status(500).json({
+    message: "حدث خطأ في الخادم",
+  });
+});
 
 // =============================
 // SERVER

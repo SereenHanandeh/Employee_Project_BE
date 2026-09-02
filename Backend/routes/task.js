@@ -12,42 +12,89 @@ const {
 } = require("../controllers/task");
 
 const auth = require("../middleware/auth");
+const role = require("../middleware/roleMiddleware");
 
-// =============================
-// ADMIN / AUTH
-// =============================
-
-// إنشاء مهمة
-taskRouter.post("/", auth, createTask);
-
-// تعديل مهمة
-taskRouter.put("/:id", auth, updateTask);
-
-// حذف مهمة
-taskRouter.delete("/:id", auth, deleteTask);
-
-// جميع المهام
-// Admin => كل المهام
+// =====================================================
+// GET ALL TASKS
+// Admin    => جميع المهام
 // Employee => المهام المعينة له فقط
+// =====================================================
 taskRouter.get("/", auth, getTasks);
 
-// الموظفين
-taskRouter.get("/employees", auth, getEmployees);
+// =====================================================
+// GET EMPLOYEES
+// Admin فقط
+// =====================================================
+taskRouter.get(
+  "/employees",
+  auth,
+  role("admin"),
+  getEmployees
+);
 
-// تعيين مهمة لموظف - ADMIN
-taskRouter.post("/assign", auth, assignTask);
+// =====================================================
+// CREATE TASK
+// Admin فقط
+// =====================================================
+taskRouter.post(
+  "/",
+  auth,
+  role("admin"),
+  createTask
+);
 
-// مهام موظف معين - ADMIN
+// =====================================================
+// UPDATE TASK
+// Admin فقط
+// =====================================================
+taskRouter.put(
+  "/:id",
+  auth,
+  role("admin"),
+  updateTask
+);
+
+// =====================================================
+// DELETE TASK
+// Admin فقط
+// =====================================================
+taskRouter.delete(
+  "/:id",
+  auth,
+  role("admin"),
+  deleteTask
+);
+
+// =====================================================
+// ASSIGN TASK TO EMPLOYEE
+// Admin فقط
+// =====================================================
+taskRouter.post(
+  "/assign",
+  auth,
+  role("admin"),
+  assignTask
+);
+
+// =====================================================
+// GET TASKS OF SPECIFIC EMPLOYEE
+// Admin فقط
+// =====================================================
 taskRouter.get(
   "/employee/:employee_id",
   auth,
+  role("admin"),
   getEmployeeTasks
 );
 
-// إزالة مهمة من موظف - ADMIN
+// =====================================================
+// REMOVE TASK FROM EMPLOYEE
+// Admin فقط
+// =====================================================
 taskRouter.delete(
   "/assignment/:employee_task_id",
   auth,
+  role("admin"),
   removeTaskFromEmployee
 );
 

@@ -5,33 +5,133 @@ const { pool } = require("../models/db");
 /* ============================= */
 exports.createLeave = async (req, res) => {
   try {
-    const { employee_id, type, from_date, to_date, notes } = req.body;
+    const {
+      employee_id,
+      type,
+      from_date,
+      to_date,
+      notes,
+    } = req.body;
+
+    // =========================================
+    // تحديد الموظف
+    // Admin يستطيع تحديد موظف
+    // Employee يأخذ employee_id الخاص به من JWT
+    // =========================================
+    let targetEmployeeId;
+
+    if (req.user.role === "admin") {
+      targetEmployeeId = employee_id;
+    } else {
+      targetEmployeeId = req.user.employee_id || req.user.id;
+    }
+
+    if (!targetEmployeeId) {
+      return res.status(400).json({
+        message: "employee_id مطلوب",
+      });
+    }
+
+    // =========================================
+    // التأكد أن الموظف موجود وغير محذوف
+    // =========================================
+    const employeeCheck = await pool.query(
+      `
+      SELECT employee_id
+      FROM employees
+      WHERE employee_id = $1
+        AND is_deleted = 0
+      `,
+      [targetEmployeeId]
+    );
+
+    if (employeeCheck.rows.length === 0) {
+      return res.status(404).json({
+        message: "الموظف غير موجود",
+      });
+    }
+
+    // =========================================
+    // التحقق من التواريخ
+    // =========================================
+    if (!from_date || !to_date) {
+      return res.status(400).json({
+        message: "تاريخ بداية ونهاية الإجازة مطلوبان",
+      });
+    }
 
     const from = new Date(from_date);
     const to = new Date(to_date);
 
-    if (to < from) {
+    if (
+      Number.isNaN(from.getTime()) ||
+      Number.isNaN(to.getTime())
+    ) {
       return res.status(400).json({
-        message: "To date must be greater than or equal from date",
+        message: "التاريخ غير صالح",
       });
     }
 
-    // ✅ حساب الأيام بشكل صحيح
-    const days =
-      Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    if (to < from) {
+      return res.status(400).json({
+        message: "تاريخ النهاية يجب أن يكون بعد أو يساوي تاريخ البداية",
+      });
+    }
 
+    // =========================================
+    // حساب عدد الأيام
+    // =========================================
+    const days =
+      Math.ceil(
+        (to.getTime() - from.getTime()) /
+          (1000 * 60 * 60 * 24)
+      ) + 1;
+
+    // =========================================
+    // مسار الصورة
+    // =========================================
+    const attachment = req.file
+      ? `/uploads/leaves/${req.file.filename}`
+      : null;
+
+    // =========================================
+    // حفظ الإجازة
+    // =========================================
     const result = await pool.query(
-      `INSERT INTO leaves
-       (employee_id, type, from_date, to_date, days, notes, status)
-       VALUES ($1,$2,$3,$4,$5,$6,'pending')
-       RETURNING *`,
-      [employee_id, type, from_date, to_date, days, notes]
+      `
+      INSERT INTO leaves
+      (
+        employee_id,
+        type,
+        from_date,
+        to_date,
+        days,
+        notes,
+        attachment,
+        status
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,'pending')
+      RETURNING *
+      `,
+      [
+        targetEmployeeId,
+        type,
+        from_date,
+        to_date,
+        days,
+        notes || null,
+        attachment,
+      ]
     );
 
     res.status(201).json(result.rows[0]);
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Create Leave Error" });
+    console.error("Create Leave Error:", err);
+
+    res.status(500).json({
+      message: "Create Leave Error",
+    });
   }
 };
 
