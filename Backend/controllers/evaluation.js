@@ -3,131 +3,90 @@ const { pool } = require("../models/db");
 /* ============================= */
 /*      CREATE EVALUATION        */
 /* ============================= */
-exports.createLeave = async (req, res) => {
+exports.createEvaluation = async (req, res) => {
   try {
-    const {
+    let {
       employee_id,
-      type,
+      performance = {},
+      personality = {},
+      relations = {},
+      notes = "",
       from_date,
       to_date,
-      notes,
     } = req.body;
 
-    let targetEmployeeId;
+    // حماية من undefined
+    performance = performance || {};
+    personality = personality || {};
+    relations = relations || {};
 
-    // =============================
-    // تحديد الموظف
-    // =============================
-
-    if (req.user.role === "admin") {
-      // Admin يستطيع إنشاء إجازة لموظف محدد
-      targetEmployeeId = employee_id;
-    } else {
-      // Employee لا نثق بالـ employee_id القادم من Frontend
-      targetEmployeeId = req.user.id;
-    }
-
-    if (!targetEmployeeId) {
-      return res.status(400).json({
-        message: "employee_id مطلوب",
-      });
-    }
-
-    // =============================
-    // التحقق من الموظف
-    // =============================
-
-    const employeeCheck = await pool.query(
-      `
-      SELECT employee_id
-      FROM employees
-      WHERE employee_id = $1
-        AND is_deleted = 0
-      `,
-      [targetEmployeeId]
+    // =========================
+    // حساب المجموع لكل قسم
+    // =========================
+    const totalPerformance = Object.values(performance).reduce(
+      (a, b) => a + Number(b || 0),
+      0
     );
 
-    if (employeeCheck.rows.length === 0) {
-      return res.status(404).json({
-        message: "الموظف غير موجود",
-      });
-    }
+    const totalPersonality = Object.values(personality).reduce(
+      (a, b) => a + Number(b || 0),
+      0
+    );
 
-    // =============================
-    // Validation
-    // =============================
+    const totalRelations = Object.values(relations).reduce(
+      (a, b) => a + Number(b || 0),
+      0
+    );
 
-    if (!type || !from_date || !to_date) {
-      return res.status(400).json({
-        message: "نوع الإجازة وتاريخ البداية والنهاية مطلوبة",
-      });
-    }
+    // =========================
+    // المجموع النهائي
+    // =========================
+    const total = totalPerformance + totalPersonality + totalRelations;
+    const maxTotal = 100;
+    const percentage = (total / maxTotal) * 100;
 
-    const from = new Date(from_date);
-    const to = new Date(to_date);
+    // =========================
+    // التقدير
+    // =========================
+    let grade = "ضعيف";
+    if (percentage >= 90) grade = "ممتاز";
+    else if (percentage >= 75) grade = "جيد جدا";
+    else if (percentage >= 60) grade = "جيد";
 
-    if (
-      Number.isNaN(from.getTime()) ||
-      Number.isNaN(to.getTime())
-    ) {
-      return res.status(400).json({
-        message: "التاريخ غير صالح",
-      });
-    }
-
-    if (to < from) {
-      return res.status(400).json({
-        message: "تاريخ النهاية يجب أن يكون أكبر من أو يساوي تاريخ البداية",
-      });
-    }
-
-    // =============================
-    // حساب الأيام
-    // =============================
-
-    const days =
-      Math.ceil(
-        (to.getTime() - from.getTime()) /
-          (1000 * 60 * 60 * 24)
-      ) + 1;
-
-    // =============================
-    // INSERT
-    // =============================
-
+    // =========================
+    // INSERT DB مع RETURNING *
+    // =========================
     const result = await pool.query(
       `
-      INSERT INTO leaves
-      (
-        employee_id,
-        type,
-        from_date,
-        to_date,
-        days,
-        notes,
-        status
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+      INSERT INTO evaluations
+        (employee_id, performance, personality, relations,
+         performance_details, personality_details, relations_details,
+         total, percentage, grade, notes, from_date, to_date)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       RETURNING *
       `,
       [
-        targetEmployeeId,
-        type,
-        from_date,
+        employee_id,
+        totalPerformance,
+        totalPersonality,
+        totalRelations,
+        performance,
+        personality,
+        relations,
+        total,
+        percentage,
+        grade,
+        notes,
+        from_date, // الآن تمرر القيمتين
         to_date,
-        days,
-        notes || null,
       ]
     );
 
-    return res.status(201).json(result.rows[0]);
-
+    // إعادة الصف المضاف مباشرة
+    res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error("Create Leave Error:", err);
-
-    return res.status(500).json({
-      message: "Create Leave Error",
-    });
+    console.error(err);
+    res.status(500).json({ message: "Evaluation Error" });
   }
 };
 /* ============================= */
@@ -301,26 +260,7 @@ exports.updateEvaluation = async (req, res) => {
         message: "employee_id مطلوب",
       });
     }
-
-      // =========================
-    // التحقق أن الموظف موجود وغير محذوف
-    // =========================
     
-    const employeeCheck = await pool.query(
-  `
-  SELECT employee_id
-  FROM employees
-  WHERE employee_id = $1
-    AND is_deleted = 0
-  `,
-  [employee_id]
-);
-
-if (employeeCheck.rows.length === 0) {
-  return res.status(404).json({
-    message: "الموظف غير موجود",
-  });
-}
 
     // =========================
     // حساب المجموع
