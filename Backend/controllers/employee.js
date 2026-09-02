@@ -192,14 +192,17 @@ exports.getActiveEmployees = async (req, res) => {
    المستخدم الحالي سواء Admin أو Employee
 ========================================================= */
 
-exports.getMe = async (req, res) => {
+const getMe = async (req, res) => {
   try {
-    const employeeId =
-      req.user?.employee_id || req.user?.id;
+    console.log("REQ.USER:", req.user);
+
+    const employeeId = req.user?.employee_id || req.user?.id;
+
+    console.log("EMPLOYEE ID:", employeeId);
 
     if (!employeeId) {
       return res.status(401).json({
-        message: "Unauthorized",
+        message: "تعذر تحديد الموظف من بيانات تسجيل الدخول",
       });
     }
 
@@ -215,9 +218,12 @@ exports.getMe = async (req, res) => {
       FROM employees
       WHERE employee_id = $1
         AND is_deleted = 0
+      LIMIT 1
       `,
       [employeeId]
     );
+
+    console.log("GET ME RESULT:", result.rows);
 
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -226,15 +232,15 @@ exports.getMe = async (req, res) => {
     }
 
     return res.json(result.rows[0]);
+
   } catch (err) {
-    console.error("Get Me Error:", err);
+    console.error("GET ME ERROR:", err);
 
     return res.status(500).json({
-      message: "Server error",
+      message: "حدث خطأ في الخادم",
     });
   }
 };
-
 
 /* =========================================================
    DELETE EMPLOYEE
