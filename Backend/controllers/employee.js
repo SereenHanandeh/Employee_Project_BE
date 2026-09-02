@@ -192,46 +192,101 @@ exports.getActiveEmployees = async (req, res) => {
    المستخدم الحالي سواء Admin أو Employee
 ========================================================= */
 
-const getMe = async (req, res) => {
+
+exports.getMe = async (req, res) => {
   try {
     console.log("REQ.USER:", req.user);
 
-    const employeeId = req.user?.employee_id || req.user?.id;
+    // =====================================================
+    // ADMIN
+    // =====================================================
+    if (req.user?.role === "admin") {
+      const adminId = req.user.admin_id || req.user.id;
 
-    console.log("EMPLOYEE ID:", employeeId);
+      if (!adminId) {
+        return res.status(401).json({
+          message: "تعذر تحديد المدير",
+        });
+      }
 
-    if (!employeeId) {
-      return res.status(401).json({
-        message: "تعذر تحديد الموظف من بيانات تسجيل الدخول",
+      const result = await pool.query(
+        `
+        SELECT
+          admin_id,
+          email
+        FROM admins
+        WHERE admin_id = $1
+        LIMIT 1
+        `,
+        [adminId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          message: "المدير غير موجود",
+        });
+      }
+
+      return res.json({
+        id: result.rows[0].admin_id,
+        admin_id: result.rows[0].admin_id,
+        employee_id: null,
+        email: result.rows[0].email,
+        name: "المدير",
+        role: "admin",
       });
     }
 
-    const result = await pool.query(
-      `
-      SELECT
-        employee_id,
-        name,
-        email,
-        department,
-        position,
-        role
-      FROM employees
-      WHERE employee_id = $1
-        AND is_deleted = 0
-      LIMIT 1
-      `,
-      [employeeId]
-    );
+    // =====================================================
+    // EMPLOYEE
+    // =====================================================
+    if (req.user?.role === "employee") {
+      const employeeId =
+        req.user.employee_id || req.user.id;
 
-    console.log("GET ME RESULT:", result.rows);
+      if (!employeeId) {
+        return res.status(401).json({
+          message: "تعذر تحديد رقم الموظف",
+        });
+      }
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        message: "المستخدم غير موجود أو تم حذفه",
+      const result = await pool.query(
+        `
+        SELECT
+          employee_id,
+          name,
+          email,
+          department,
+          position,
+          role
+        FROM employees
+        WHERE employee_id = $1
+          AND is_deleted = 0
+        LIMIT 1
+        `,
+        [employeeId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          message: "الموظف غير موجود أو تم حذفه",
+        });
+      }
+
+      return res.json({
+        ...result.rows[0],
+        id: result.rows[0].employee_id,
+        employee_id: result.rows[0].employee_id,
+        role: "employee",
       });
     }
 
-    return res.json(result.rows[0]);
+    // =====================================================
+    // UNKNOWN ROLE
+    // =====================================================
+    return res.status(403).json({
+      message: "نوع المستخدم غير معروف",
+    });
 
   } catch (err) {
     console.error("GET ME ERROR:", err);
@@ -241,6 +296,7 @@ const getMe = async (req, res) => {
     });
   }
 };
+
 
 /* =========================================================
    DELETE EMPLOYEE
