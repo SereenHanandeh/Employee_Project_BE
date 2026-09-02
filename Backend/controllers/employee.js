@@ -1,9 +1,9 @@
 const { pool } = require("../models/db");
 const bcrypt = require("bcryptjs");
 
-/* ============================= */
-/*        CREATE EMPLOYEE        */
-/* ============================= */
+/* =========================================================
+   CREATE EMPLOYEE
+========================================================= */
 
 exports.createEmployee = async (req, res) => {
   try {
@@ -34,9 +34,11 @@ exports.createEmployee = async (req, res) => {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // السماح فقط بالأدوار المعروفة
-    const allowedRoles = ["employee", "admin"];
+    // =============================
+    // Validate role
+    // =============================
 
+    const allowedRoles = ["employee", "admin"];
     const employeeRole = role || "employee";
 
     if (!allowedRoles.includes(employeeRole)) {
@@ -97,8 +99,8 @@ exports.createEmployee = async (req, res) => {
       `,
       [
         name.trim(),
-        department || null,
-        position || null,
+        department?.trim() || null,
+        position?.trim() || null,
         normalizedEmail,
         hashedPassword,
         employeeRole,
@@ -106,7 +108,6 @@ exports.createEmployee = async (req, res) => {
     );
 
     return res.status(201).json(result.rows[0]);
-
   } catch (err) {
     console.error("Create Employee Error:", err);
 
@@ -117,9 +118,10 @@ exports.createEmployee = async (req, res) => {
 };
 
 
-/* ============================= */
-/*        GET ALL EMPLOYEES      */
-/* ============================= */
+/* =========================================================
+   GET ALL EMPLOYEES
+   يستخدم في صفحة إدارة الموظفين + سلة المحذوفات
+========================================================= */
 
 exports.getEmployees = async (req, res) => {
   try {
@@ -142,7 +144,6 @@ exports.getEmployees = async (req, res) => {
     );
 
     return res.json(result.rows);
-
   } catch (err) {
     console.error("Fetch Employees Error:", err);
 
@@ -153,9 +154,92 @@ exports.getEmployees = async (req, res) => {
 };
 
 
-/* ============================= */
-/*        DELETE EMPLOYEE        */
-/* ============================= */
+/* =========================================================
+   GET ACTIVE EMPLOYEES
+   يستخدم فقط لاختيار الموظف في طلب الإجازة
+========================================================= */
+
+exports.getActiveEmployees = async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        employee_id,
+        name,
+        email,
+        department,
+        position,
+        role
+      FROM employees
+      WHERE is_deleted = 0
+      ORDER BY name ASC
+      `
+    );
+
+    return res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch Active Employees Error:", err);
+
+    return res.status(500).json({
+      message: "Fetch Active Employees Error",
+    });
+  }
+};
+
+
+/* =========================================================
+   GET ME
+   المستخدم الحالي سواء Admin أو Employee
+========================================================= */
+
+exports.getMe = async (req, res) => {
+  try {
+    const employeeId =
+      req.user?.employee_id || req.user?.id;
+
+    if (!employeeId) {
+      return res.status(401).json({
+        message: "Unauthorized",
+      });
+    }
+
+    const result = await pool.query(
+      `
+      SELECT
+        employee_id,
+        name,
+        email,
+        department,
+        position,
+        role
+      FROM employees
+      WHERE employee_id = $1
+        AND is_deleted = 0
+      `,
+      [employeeId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "المستخدم غير موجود أو تم حذفه",
+      });
+    }
+
+    return res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Get Me Error:", err);
+
+    return res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
+
+/* =========================================================
+   DELETE EMPLOYEE
+   حذف منطقي فقط
+========================================================= */
 
 exports.deleteEmployee = async (req, res) => {
   try {
@@ -167,7 +251,10 @@ exports.deleteEmployee = async (req, res) => {
       });
     }
 
-    // التأكد أن الموظف موجود وغير محذوف
+    // =============================
+    // Check employee
+    // =============================
+
     const check = await pool.query(
       `
       SELECT employee_id
@@ -184,6 +271,10 @@ exports.deleteEmployee = async (req, res) => {
       });
     }
 
+    // =============================
+    // Soft delete
+    // =============================
+
     await pool.query(
       `
       UPDATE employees
@@ -196,7 +287,6 @@ exports.deleteEmployee = async (req, res) => {
     return res.json({
       message: "تم حذف الموظف بنجاح",
     });
-
   } catch (err) {
     console.error("Delete Employee Error:", err);
 
@@ -207,9 +297,9 @@ exports.deleteEmployee = async (req, res) => {
 };
 
 
-/* ============================= */
-/*        UPDATE EMPLOYEE        */
-/* ============================= */
+/* =========================================================
+   UPDATE EMPLOYEE
+========================================================= */
 
 exports.updateEmployee = async (req, res) => {
   try {
@@ -223,15 +313,29 @@ exports.updateEmployee = async (req, res) => {
       role,
     } = req.body;
 
+    // =============================
+    // Validate ID
+    // =============================
+
     if (!Number.isInteger(Number(id))) {
       return res.status(400).json({
         message: "معرف الموظف غير صالح",
       });
     }
 
-    if (!name || !email) {
+    // =============================
+    // Validate required fields
+    // =============================
+
+    if (!name || !name.trim()) {
       return res.status(400).json({
-        message: "الاسم والإيميل مطلوبان",
+        message: "اسم الموظف مطلوب",
+      });
+    }
+
+    if (!email || !email.trim()) {
+      return res.status(400).json({
+        message: "الإيميل مطلوب",
       });
     }
 
@@ -303,6 +407,7 @@ exports.updateEmployee = async (req, res) => {
         email = $4,
         role = $5
       WHERE employee_id = $6
+        AND is_deleted = 0
       RETURNING
         employee_id,
         name,
@@ -313,19 +418,24 @@ exports.updateEmployee = async (req, res) => {
       `,
       [
         name.trim(),
-        department || null,
-        position || null,
+        department?.trim() || null,
+        position?.trim() || null,
         normalizedEmail,
         role,
         id,
       ]
     );
 
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "الموظف غير موجود",
+      });
+    }
+
     return res.json({
       message: "تم تحديث الموظف بنجاح",
       employee: result.rows[0],
     });
-
   } catch (err) {
     console.error("Update Employee Error:", err);
 
@@ -336,51 +446,9 @@ exports.updateEmployee = async (req, res) => {
 };
 
 
-/* ============================= */
-/*             GET ME            */
-/* ============================= */
-
-exports.getMe = async (req, res) => {
-  try {
-    const employeeId = req.user.id;
-
-    const result = await pool.query(
-      `
-      SELECT
-        employee_id,
-        name,
-        email,
-        department,
-        position,
-        role
-      FROM employees
-      WHERE employee_id = $1
-        AND is_deleted = 0
-      `,
-      [employeeId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        message: "Employee not found",
-      });
-    }
-
-    return res.json(result.rows[0]);
-
-  } catch (err) {
-    console.error("Get Me Error:", err);
-
-    return res.status(500).json({
-      message: "Server error",
-    });
-  }
-};
-
-
-/* ============================= */
-/*        RESTORE EMPLOYEE       */
-/* ============================= */
+/* =========================================================
+   RESTORE EMPLOYEE
+========================================================= */
 
 exports.restoreEmployee = async (req, res) => {
   try {
@@ -391,6 +459,10 @@ exports.restoreEmployee = async (req, res) => {
         message: "معرف الموظف غير صالح",
       });
     }
+
+    // =============================
+    // Check deleted employee
+    // =============================
 
     const check = await pool.query(
       `
@@ -408,6 +480,10 @@ exports.restoreEmployee = async (req, res) => {
       });
     }
 
+    // =============================
+    // Restore
+    // =============================
+
     await pool.query(
       `
       UPDATE employees
@@ -420,7 +496,6 @@ exports.restoreEmployee = async (req, res) => {
     return res.json({
       message: "تم استرجاع الموظف بنجاح",
     });
-
   } catch (err) {
     console.error("Restore Employee Error:", err);
 
@@ -431,9 +506,9 @@ exports.restoreEmployee = async (req, res) => {
 };
 
 
-/* ============================= */
-/*      GET DELETED EMPLOYEES    */
-/* ============================= */
+/* =========================================================
+   GET DELETED EMPLOYEES
+========================================================= */
 
 exports.getDeletedEmployees = async (req, res) => {
   try {
@@ -453,7 +528,6 @@ exports.getDeletedEmployees = async (req, res) => {
     );
 
     return res.json(result.rows);
-
   } catch (err) {
     console.error("Fetch Deleted Employees Error:", err);
 

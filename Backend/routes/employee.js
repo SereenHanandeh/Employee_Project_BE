@@ -3,6 +3,7 @@ const employeeRouter = require("express").Router();
 const {
   createEmployee,
   getEmployees,
+  getActiveEmployees,
   deleteEmployee,
   updateEmployee,
   getMe,
@@ -13,32 +14,102 @@ const {
 const auth = require("../middleware/auth");
 const isAdmin = require("../middleware/isAdmin");
 
-// ===============================
-// الموظف الحالي
-// Employee + Admin
-// ===============================
-employeeRouter.get("/me", auth, getMe);
 
-// ===============================
-// إدارة الموظفين - Admin Only
-// ===============================
+/* =========================================================
+   CURRENT USER
+========================================================= */
 
-// إضافة موظف
-employeeRouter.post("/", auth, isAdmin, createEmployee);
+employeeRouter.get(
+  "/me",
+  auth,
+  getMe
+);
 
-// عرض جميع الموظفين
-employeeRouter.get("/", auth, isAdmin, getEmployees);
 
-// حذف موظف
-employeeRouter.delete("/:id/delete", auth, isAdmin, deleteEmployee);
+/* =========================================================
+   ACTIVE EMPLOYEES
+   يستخدمها Admin عند إنشاء إجازة
+========================================================= */
 
-// تعديل موظف
-employeeRouter.put("/:id/update", auth, isAdmin, updateEmployee);
+employeeRouter.get(
+  "/active",
+  auth,
+  isAdmin,
+  getActiveEmployees
+);
 
-// استرجاع موظف محذوف
-employeeRouter.put("/:id/restore", auth, isAdmin, restoreEmployee);
 
-// عرض الموظفين المحذوفين
-employeeRouter.get("/deleted", auth, isAdmin, getDeletedEmployees);
+/* =========================================================
+   ALL EMPLOYEES
+   صفحة إدارة الموظفين
+========================================================= */
+
+employeeRouter.get(
+  "/",
+  auth,
+  isAdmin,
+  getEmployees
+);
+
+
+/* =========================================================
+   CREATE EMPLOYEE
+========================================================= */
+
+employeeRouter.post(
+  "/",
+  auth,
+  isAdmin,
+  createEmployee
+);
+
+
+/* =========================================================
+   DELETE EMPLOYEE
+========================================================= */
+
+employeeRouter.delete(
+  "/:id/delete",
+  auth,
+  isAdmin,
+  deleteEmployee
+);
+
+
+/* =========================================================
+   UPDATE EMPLOYEE
+========================================================= */
+
+employeeRouter.put(
+  "/:id/update",
+  auth,
+  isAdmin,
+  updateEmployee
+);
+
+
+/* =========================================================
+   RESTORE EMPLOYEE
+========================================================= */
+
+employeeRouter.put(
+  "/:id/restore",
+  auth,
+  isAdmin,
+  restoreEmployee
+);
+
+
+/* =========================================================
+   DELETED EMPLOYEES
+========================================================= */
+
+employeeRouter.get(
+  "/deleted",
+  auth,
+  isAdmin,
+  getDeletedEmployees
+);
+
 
 module.exports = employeeRouter;
