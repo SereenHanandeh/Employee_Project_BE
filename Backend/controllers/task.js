@@ -126,14 +126,23 @@ exports.getTasks = async (req, res) => {
       message: "غير مسموح",
     });
 
-  } catch (err) {
-    console.error("Get Tasks Error:", err);
+  }  catch (err) {
+  console.error("========== GET TASKS ERROR ==========");
+  console.error("Message:", err.message);
+  console.error("Code:", err.code);
+  console.error("Detail:", err.detail);
+  console.error("Hint:", err.hint);
+  console.error("Stack:", err.stack);
+  console.error("User:", req.user);
+  console.error("=====================================");
 
-    return res.status(500).json({
-      message: "Fetch Tasks Error",
-    });
-  }
-};
+  return res.status(500).json({
+    message: "Fetch Tasks Error",
+    error: err.message,
+    code: err.code,
+  });
+}
+
 
 
 /* ============================= */
