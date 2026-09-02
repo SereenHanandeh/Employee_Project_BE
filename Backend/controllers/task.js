@@ -33,6 +33,7 @@ exports.createTask = async (req, res) => {
 
     return res.status(500).json({
       message: "Create Task Error",
+      error: err.message,
     });
   }
 };
@@ -41,13 +42,11 @@ exports.createTask = async (req, res) => {
 /* ============================= */
 /*          GET TASKS             */
 /* ============================= */
-/*
-   ADMIN    => جميع المهام + الموظف المعين
-   EMPLOYEE => المهام المعينة له فقط
-*/
 
 exports.getTasks = async (req, res) => {
   try {
+
+    console.log("GET TASKS USER:", req.user);
 
     // =============================
     // ADMIN
@@ -61,20 +60,26 @@ exports.getTasks = async (req, res) => {
           t.task_id,
           t.title,
           t.description,
-          et.employee_task_id,
+
+          et.id AS employee_task_id,
           et.employee_id,
+
           e.name AS employee_name,
           e.email AS employee_email
+
         FROM tasks t
+
         LEFT JOIN employee_tasks et
           ON et.task_id = t.task_id
+
         LEFT JOIN employees e
           ON e.employee_id = et.employee_id
+
         ORDER BY t.task_id DESC
         `
       );
 
-      return res.json(result.rows);
+      return res.status(200).json(result.rows);
     }
 
 
@@ -84,7 +89,6 @@ exports.getTasks = async (req, res) => {
 
     if (req.user?.role === "employee") {
 
-      // الهوية تأتي من JWT
       const employeeId =
         req.user.employee_id || req.user.id;
 
@@ -97,24 +101,31 @@ exports.getTasks = async (req, res) => {
       const result = await pool.query(
         `
         SELECT
-          et.employee_task_id,
+
+          et.id AS employee_task_id,
           et.employee_id,
           et.task_id,
+
           t.title,
           t.description
+
         FROM employee_tasks et
+
         INNER JOIN tasks t
           ON t.task_id = et.task_id
+
         INNER JOIN employees e
           ON e.employee_id = et.employee_id
+
         WHERE et.employee_id = $1
-          AND e.is_deleted = 0
-        ORDER BY et.employee_task_id DESC
+          AND e.is_deleted = false
+
+        ORDER BY et.id DESC
         `,
         [employeeId]
       );
 
-      return res.json(result.rows);
+      return res.status(200).json(result.rows);
     }
 
 
@@ -126,22 +137,23 @@ exports.getTasks = async (req, res) => {
       message: "غير مسموح",
     });
 
-  }  catch (err) {
-  console.error("========== GET TASKS ERROR ==========");
-  console.error("Message:", err.message);
-  console.error("Code:", err.code);
-  console.error("Detail:", err.detail);
-  console.error("Hint:", err.hint);
-  console.error("Stack:", err.stack);
-  console.error("User:", req.user);
-  console.error("=====================================");
+  } catch (err) {
 
-  return res.status(500).json({
-    message: "Fetch Tasks Error",
-    error: err.message,
-    code: err.code,
-  });
-}
+    console.error("========== GET TASKS ERROR ==========");
+    console.error("Message:", err.message);
+    console.error("Code:", err.code);
+    console.error("Detail:", err.detail);
+    console.error("Hint:", err.hint);
+    console.error("Stack:", err.stack);
+    console.error("User:", req.user);
+    console.error("=====================================");
+
+    return res.status(500).json({
+      message: "Fetch Tasks Error",
+      error: err.message,
+      code: err.code,
+    });
+  }
 };
 
 
@@ -160,25 +172,27 @@ exports.getEmployees = async (req, res) => {
         name,
         email
       FROM employees
-      WHERE is_deleted = 0
+      WHERE is_deleted = false
       ORDER BY name ASC
       `
     );
 
-    return res.json(result.rows);
+    return res.status(200).json(result.rows);
 
   } catch (err) {
+
     console.error("Get Task Employees Error:", err);
 
     return res.status(500).json({
       message: "Fetch Employees Error",
+      error: err.message,
     });
   }
 };
 
 
 /* ============================= */
-/*       ASSIGN TASK (ADMIN)      */
+/*       ASSIGN TASK (ADMIN)     */
 /* ============================= */
 
 exports.assignTask = async (req, res) => {
@@ -245,7 +259,7 @@ exports.assignTask = async (req, res) => {
         email
       FROM employees
       WHERE employee_id = $1
-        AND is_deleted = 0
+        AND is_deleted = false
       `,
       [employeeId]
     );
@@ -345,10 +359,14 @@ exports.assignTask = async (req, res) => {
   } catch (err) {
 
     console.error("Assign Task Error:", err);
+    console.error("Message:", err.message);
+    console.error("Code:", err.code);
 
     return res.status(500).json({
       message:
         "حدث خطأ في قاعدة البيانات أثناء تعيين المهمة",
+      error: err.message,
+      code: err.code,
     });
   }
 };
@@ -394,21 +412,27 @@ exports.getEmployeeTasks = async (req, res) => {
     const result = await pool.query(
       `
       SELECT
-        et.employee_task_id,
+
+        et.id AS employee_task_id,
         et.employee_id,
         et.task_id,
+
         t.title,
         t.description
+
       FROM employee_tasks et
+
       INNER JOIN tasks t
         ON t.task_id = et.task_id
+
       WHERE et.employee_id = $1
-      ORDER BY et.employee_task_id DESC
+
+      ORDER BY et.id DESC
       `,
       [employeeId]
     );
 
-    return res.json(result.rows);
+    return res.status(200).json(result.rows);
 
   } catch (err) {
 
@@ -416,6 +440,7 @@ exports.getEmployeeTasks = async (req, res) => {
 
     return res.status(500).json({
       message: "Fetch Employee Tasks Error",
+      error: err.message,
     });
   }
 };
@@ -448,7 +473,7 @@ exports.removeTaskFromEmployee = async (req, res) => {
     const result = await pool.query(
       `
       DELETE FROM employee_tasks
-      WHERE employee_task_id = $1
+      WHERE id = $1
       RETURNING *
       `,
       [assignmentId]
@@ -460,7 +485,7 @@ exports.removeTaskFromEmployee = async (req, res) => {
       });
     }
 
-    return res.json({
+    return res.status(200).json({
       message:
         "تم إلغاء تعيين المهمة من الموظف بنجاح",
     });
@@ -471,13 +496,14 @@ exports.removeTaskFromEmployee = async (req, res) => {
 
     return res.status(500).json({
       message: "Remove Assignment Error",
+      error: err.message,
     });
   }
 };
 
 
 /* ============================= */
-/*        UPDATE TASK (ADMIN)     */
+/*        UPDATE TASK (ADMIN)    */
 /* ============================= */
 
 exports.updateTask = async (req, res) => {
@@ -529,7 +555,7 @@ exports.updateTask = async (req, res) => {
       });
     }
 
-    return res.json(result.rows[0]);
+    return res.status(200).json(result.rows[0]);
 
   } catch (err) {
 
@@ -537,13 +563,14 @@ exports.updateTask = async (req, res) => {
 
     return res.status(500).json({
       message: "Update Task Error",
+      error: err.message,
     });
   }
 };
 
 
 /* ============================= */
-/*        DELETE TASK (ADMIN)     */
+/*        DELETE TASK (ADMIN)    */
 /* ============================= */
 
 exports.deleteTask = async (req, res) => {
@@ -587,6 +614,7 @@ exports.deleteTask = async (req, res) => {
 
     return res.status(500).json({
       message: "Delete Task Error",
+      error: err.message,
     });
   }
 };
