@@ -37,7 +37,7 @@ app.use(
 // AUTH MIDDLEWARE
 // =============================
 
-const authMiddleware = require("./middleware/authMiddleware");
+const authMiddleware = require("./middleware/auth");
 
 // =============================
 // PROTECTED ROUTES
