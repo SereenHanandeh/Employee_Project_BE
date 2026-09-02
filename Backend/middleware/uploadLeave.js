@@ -1,8 +1,16 @@
+
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 
-const uploadDir = path.join(__dirname, "../uploads/leaves");
+// =====================================================
+// UPLOAD DIRECTORY
+// =====================================================
+
+const uploadDir = path.join(
+  __dirname,
+  "../uploads/leaves"
+);
 
 // إنشاء المجلد إذا لم يكن موجودًا
 if (!fs.existsSync(uploadDir)) {
@@ -10,6 +18,10 @@ if (!fs.existsSync(uploadDir)) {
     recursive: true,
   });
 }
+
+// =====================================================
+// STORAGE
+// =====================================================
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -20,18 +32,24 @@ const storage = multer.diskStorage({
     const ext = path.extname(file.originalname);
 
     const fileName =
-      `leave-${Date.now()}-${Math.round(Math.random() * 1e9)}` +
-      ext;
+      `leave-${Date.now()}-${Math.round(
+        Math.random() * 1e9
+      )}${ext}`;
 
     cb(null, fileName);
   },
 });
+
+// =====================================================
+// FILE FILTER
+// =====================================================
 
 const fileFilter = (req, file, cb) => {
   const allowedTypes = [
     "image/jpeg",
     "image/png",
     "image/jpg",
+    "image/webp",
     "application/pdf",
   ];
 
@@ -40,21 +58,24 @@ const fileFilter = (req, file, cb) => {
   } else {
     cb(
       new Error(
-        "يسمح فقط برفع JPG أو PNG أو PDF"
+        "يسمح فقط برفع JPG أو PNG أو WEBP أو PDF"
       ),
       false
     );
   }
 };
 
+// =====================================================
+// MULTER
+// =====================================================
+
 const uploadLeave = multer({
   storage,
+  fileFilter,
 
   limits: {
     fileSize: 5 * 1024 * 1024,
   },
-
-  fileFilter,
 });
 
 module.exports = uploadLeave;
