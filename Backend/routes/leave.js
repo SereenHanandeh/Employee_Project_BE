@@ -9,7 +9,7 @@ const {
 } = require("../controllers/leave");
 
 const auth = require("../middleware/auth");
-const role = require("../middleware/roleMiddleware");
+const role = require("../middleware/role");
 
 const multer = require("multer");
 const path = require("path");

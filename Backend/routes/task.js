@@ -12,7 +12,7 @@ const {
 } = require("../controllers/task");
 
 const auth = require("../middleware/auth");
-const role = require("../middleware/roleMiddleware");
+const role = require("../middleware/role");
 
 // =====================================================
 // GET ALL TASKS
