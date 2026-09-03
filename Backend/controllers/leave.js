@@ -1,3 +1,4 @@
+
 const { pool } = require("../models/db");
 
 // =====================================================
@@ -6,6 +7,13 @@ const { pool } = require("../models/db");
 
 exports.createLeave = async (req, res) => {
   try {
+    console.log("======================================");
+    console.log("CREATE LEAVE");
+    console.log("BODY:", req.body);
+    console.log("FILE:", req.file);
+    console.log("USER:", req.user);
+    console.log("======================================");
+
     const {
       employee_id,
       type,
@@ -20,11 +28,12 @@ exports.createLeave = async (req, res) => {
 
     let targetEmployeeId;
 
-    if (req.user.role === "admin") {
+    if (req.user?.role === "admin") {
       targetEmployeeId = employee_id;
     } else {
       targetEmployeeId =
-        req.user.employee_id || req.user.id;
+        req.user?.employee_id ||
+        req.user?.id;
     }
 
     if (!targetEmployeeId) {
@@ -34,12 +43,12 @@ exports.createLeave = async (req, res) => {
     }
 
     // =====================================================
-    // التأكد من الموظف
+    // التأكد من وجود الموظف
     // =====================================================
 
     const employeeCheck = await pool.query(
       `
-      SELECT employee_id
+      SELECT employee_id, name
       FROM employees
       WHERE employee_id = $1
         AND is_deleted = 0
@@ -54,7 +63,7 @@ exports.createLeave = async (req, res) => {
     }
 
     // =====================================================
-    // التحقق من البيانات
+    // التحقق من نوع الإجازة
     // =====================================================
 
     if (!type || !type.trim()) {
@@ -63,6 +72,10 @@ exports.createLeave = async (req, res) => {
       });
     }
 
+    // =====================================================
+    // التحقق من التواريخ
+    // =====================================================
+
     if (!from_date || !to_date) {
       return res.status(400).json({
         message:
@@ -70,12 +83,13 @@ exports.createLeave = async (req, res) => {
       });
     }
 
-    // =====================================================
-    // التحقق من التاريخ
-    // =====================================================
+    const from = new Date(
+      `${from_date}T00:00:00`
+    );
 
-    const from = new Date(from_date);
-    const to = new Date(to_date);
+    const to = new Date(
+      `${to_date}T00:00:00`
+    );
 
     if (
       Number.isNaN(from.getTime()) ||
@@ -86,6 +100,10 @@ exports.createLeave = async (req, res) => {
       });
     }
 
+    // =====================================================
+    // التأكد من ترتيب التاريخ
+    // =====================================================
+
     if (to < from) {
       return res.status(400).json({
         message:
@@ -94,25 +112,39 @@ exports.createLeave = async (req, res) => {
     }
 
     // =====================================================
-    // حساب الأيام
+    // حساب عدد الأيام
     // =====================================================
 
+    const difference =
+      to.getTime() - from.getTime();
+
     const days =
-      Math.ceil(
-        (to.getTime() - from.getTime()) /
+      Math.floor(
+        difference /
           (1000 * 60 * 60 * 24)
       ) + 1;
 
+    if (days <= 0) {
+      return res.status(400).json({
+        message: "عدد أيام الإجازة غير صحيح",
+      });
+    }
+
     // =====================================================
-    // ATTACHMENT
+    // المرفق
     // =====================================================
 
     const attachment = req.file
       ? `/uploads/leaves/${req.file.filename}`
       : null;
 
-    console.log("Uploaded Leave File:", req.file);
-    console.log("Saved Attachment:", attachment);
+    console.log("Employee ID:", targetEmployeeId);
+    console.log("Type:", type);
+    console.log("From Date:", from_date);
+    console.log("To Date:", to_date);
+    console.log("Days:", days);
+    console.log("Notes:", notes);
+    console.log("Attachment:", attachment);
 
     // =====================================================
     // INSERT
@@ -132,7 +164,7 @@ exports.createLeave = async (req, res) => {
         status
       )
       VALUES
-      ($1,$2,$3,$4,$5,$6,$7,'pending')
+      ($1, $2, $3, $4, $5, $6, $7, 'pending')
       RETURNING *
       `,
       [
@@ -146,35 +178,45 @@ exports.createLeave = async (req, res) => {
       ]
     );
 
-    // =====================================================
-    // RESPONSE
-    // =====================================================
+    console.log(
+      "Leave created successfully:",
+      result.rows[0]
+    );
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "تم إنشاء طلب الإجازة بنجاح",
       leave: result.rows[0],
     });
-  } catch (err) {
-    console.error(
-      "Create Leave Error:",
-      err
-    );
 
-    // Multer errors
+  } catch (err) {
+    console.error("======================================");
+    console.error("CREATE LEAVE ERROR:");
+    console.error(err);
+    console.error("======================================");
+
+    // =====================================================
+    // Multer - حجم الملف
+    // =====================================================
+
     if (err.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({
         message:
-          "حجم الملف يجب ألا يتجاوز 5MB",
+          "حجم الملف يجب ألا يتجاوز 5 ميجابايت",
       });
     }
 
-    res.status(500).json({
+    // =====================================================
+    // PostgreSQL Error
+    // =====================================================
+
+    return res.status(500).json({
       message:
         err.message ||
         "فشل إنشاء طلب الإجازة",
     });
   }
 };
+
 
 // =====================================================
 // GET ALL LEAVES
@@ -203,18 +245,20 @@ exports.getLeaves = async (req, res) => {
       `
     );
 
-    res.json(result.rows);
+    return res.json(result.rows);
+
   } catch (err) {
     console.error(
       "Get Leaves Error:",
       err
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Fetch Leaves Error",
     });
   }
 };
+
 
 // =====================================================
 // GET MY LEAVES
@@ -222,9 +266,11 @@ exports.getLeaves = async (req, res) => {
 
 exports.getMyLeaves = async (req, res) => {
   try {
-    const userId = req.user?.employee_id || req.user?.id;
+    const employeeId =
+      req.user?.employee_id ||
+      req.user?.id;
 
-    if (!userId) {
+    if (!employeeId) {
       return res.status(401).json({
         message: "Unauthorized",
       });
@@ -246,21 +292,23 @@ exports.getMyLeaves = async (req, res) => {
       WHERE employee_id = $1
       ORDER BY leave_id DESC
       `,
-      [userId]
+      [employeeId]
     );
 
-    res.json(result.rows);
+    return res.json(result.rows);
+
   } catch (err) {
     console.error(
       "Get My Leaves Error:",
       err
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Fetch My Leaves Error",
     });
   }
 };
+
 
 // =====================================================
 // UPDATE LEAVE
@@ -277,8 +325,13 @@ exports.updateLeave = async (req, res) => {
       notes,
     } = req.body;
 
+    // =====================================================
+    // التحقق من البيانات
+    // =====================================================
+
     if (
       !type ||
+      !type.trim() ||
       !from_date ||
       !to_date
     ) {
@@ -288,8 +341,17 @@ exports.updateLeave = async (req, res) => {
       });
     }
 
-    const from = new Date(from_date);
-    const to = new Date(to_date);
+    // =====================================================
+    // التحقق من التاريخ
+    // =====================================================
+
+    const from = new Date(
+      `${from_date}T00:00:00`
+    );
+
+    const to = new Date(
+      `${to_date}T00:00:00`
+    );
 
     if (
       Number.isNaN(from.getTime()) ||
@@ -307,11 +369,19 @@ exports.updateLeave = async (req, res) => {
       });
     }
 
+    // =====================================================
+    // حساب الأيام
+    // =====================================================
+
     const days =
-      Math.ceil(
+      Math.floor(
         (to.getTime() - from.getTime()) /
           (1000 * 60 * 60 * 24)
       ) + 1;
+
+    // =====================================================
+    // UPDATE
+    // =====================================================
 
     const result = await pool.query(
       `
@@ -341,45 +411,54 @@ exports.updateLeave = async (req, res) => {
       });
     }
 
-    res.json({
+    return res.json({
       message: "تم تعديل الإجازة بنجاح",
       leave: result.rows[0],
     });
+
   } catch (err) {
     console.error(
       "Update Leave Error:",
       err
     );
 
-    res.status(500).json({
-      message: "Update Leave Error",
+    return res.status(500).json({
+      message:
+        err.message ||
+        "Update Leave Error",
     });
   }
 };
+
 
 // =====================================================
 // UPDATE LEAVE STATUS
 // =====================================================
 
-exports.updateLeaveStatus = async (
-  req,
-  res
-) => {
+exports.updateLeaveStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
 
-    const allowed = [
+    // =====================================================
+    // الحالات المسموحة
+    // =====================================================
+
+    const allowedStatuses = [
       "pending",
       "approved",
       "rejected",
     ];
 
-    if (!allowed.includes(status)) {
+    if (!allowedStatuses.includes(status)) {
       return res.status(400).json({
         message: "Invalid status",
       });
     }
+
+    // =====================================================
+    // UPDATE STATUS
+    // =====================================================
 
     const result = await pool.query(
       `
@@ -397,178 +476,21 @@ exports.updateLeaveStatus = async (
       });
     }
 
-    res.json({
+    return res.json({
       message: "تم تحديث حالة الإجازة",
       leave: result.rows[0],
     });
+
   } catch (err) {
     console.error(
       "Update Status Error:",
       err
     );
 
-    res.status(500).json({
-      message: "Update Status Error",
+    return res.status(500).json({
+      message:
+        err.message ||
+        "Update Status Error",
     });
-  }
-};
-
-/* ============================= */
-/*          GET LEAVES           */
-/* ============================= */
-exports.getLeaves = async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT l.*, emp.name
-      FROM leaves l
-      JOIN employees emp
-      ON l.employee_id = emp.employee_id
-      ORDER BY l.leave_id DESC
-    `);
-
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Fetch Leaves Error" });
-  }
-};
-
-/* ============================= */
-/*       GET MY LEAVES          */
-/* ============================= */
-exports.getMyLeaves = async (req, res) => {
-  try {
-    const userId = req.user?.id;
-
-    if (!userId) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const result = await pool.query(
-      `SELECT leave_id, type, from_date, to_date, days, status
-       FROM leaves
-       WHERE employee_id=$1
-       ORDER BY leave_id DESC`,
-      [userId]
-    );
-
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Fetch My Leaves Error" });
-  }
-};
-
-
-/* ============================= */
-/*        UPDATE LEAVE           */
-/* ============================= */
-
-exports.updateLeave = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const {
-      type,
-      from_date,
-      to_date,
-      notes,
-    } = req.body;
-
-    if (!type || !from_date || !to_date) {
-      return res.status(400).json({
-        message: "Type, from date and to date are required",
-      });
-    }
-
-    const from = new Date(from_date);
-    const to = new Date(to_date);
-
-    if (
-      Number.isNaN(from.getTime()) ||
-      Number.isNaN(to.getTime())
-    ) {
-      return res.status(400).json({
-        message: "Invalid date",
-      });
-    }
-
-    if (to < from) {
-      return res.status(400).json({
-        message: "To date must be greater than or equal from date",
-      });
-    }
-
-    const days =
-      Math.ceil(
-        (to.getTime() - from.getTime()) /
-          (1000 * 60 * 60 * 24)
-      ) + 1;
-
-    const result = await pool.query(
-      `UPDATE leaves
-       SET
-         type = $1,
-         from_date = $2,
-         to_date = $3,
-         days = $4,
-         notes = $5
-       WHERE leave_id = $6
-       RETURNING *`,
-      [
-        type,
-        from_date,
-        to_date,
-        days,
-        notes || null,
-        id,
-      ]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        message: "Leave not found",
-      });
-    }
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error(err);
-
-    res.status(500).json({
-      message: "Update Leave Error",
-    });
-  }
-};
-
-/* ============================= */
-/*     UPDATE LEAVE STATUS      */
-/* ============================= */
-exports.updateLeaveStatus = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-
-    // ❌ validate status
-    const allowed = ["pending", "approved", "rejected"];
-    if (!allowed.includes(status)) {
-      return res.status(400).json({ message: "Invalid status" });
-    }
-
-    const result = await pool.query(
-      `UPDATE leaves
-       SET status=$1
-       WHERE leave_id=$2
-       RETURNING *`,
-      [status, id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Leave not found" });
-    }
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Update Status Error" });
   }
 };
