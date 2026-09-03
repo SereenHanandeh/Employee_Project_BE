@@ -43,6 +43,7 @@ exports.createTask = async (req, res) => {
 // =========================================================
 // GET TASKS
 // =========================================================
+
 exports.getTasks = async (req, res) => {
   try {
     console.log("GET TASKS USER:", req.user);
@@ -51,19 +52,30 @@ exports.getTasks = async (req, res) => {
     // ADMIN
     // =====================================================
     if (req.user?.role === "admin") {
-
-      const result = await pool.query(
-        `
+      const result = await pool.query(`
         SELECT
           t.task_id,
           t.title,
           t.description,
 
-          et.id AS employee_task_id,
-          et.employee_id,
+          -- جميع أرقام الموظفين المرتبطين بالمهمة
+          COALESCE(
+            ARRAY_AGG(DISTINCT et.employee_id)
+            FILTER (WHERE et.employee_id IS NOT NULL),
+            '{}'
+          ) AS employee_ids,
 
-          e.name AS employee_name,
-          e.email AS employee_email
+          -- جميع الموظفين المرتبطين بالمهمة
+          COALESCE(
+            JSON_AGG(
+              DISTINCT JSONB_BUILD_OBJECT(
+                'employee_id', e.employee_id,
+                'name', e.name,
+                'email', e.email
+              )
+            ) FILTER (WHERE e.employee_id IS NOT NULL),
+            '[]'
+          ) AS employees
 
         FROM tasks t
 
@@ -72,20 +84,23 @@ exports.getTasks = async (req, res) => {
 
         LEFT JOIN employees e
           ON e.employee_id = et.employee_id
+          AND e.is_deleted = 0
+
+        GROUP BY
+          t.task_id,
+          t.title,
+          t.description
 
         ORDER BY t.task_id DESC
-        `
-      );
+      `);
 
       return res.json(result.rows);
     }
-
 
     // =====================================================
     // EMPLOYEE
     // =====================================================
     if (req.user?.role === "employee") {
-
       const employeeId =
         req.user.employee_id ||
         req.user.id;
@@ -102,10 +117,8 @@ exports.getTasks = async (req, res) => {
           et.id AS employee_task_id,
           et.employee_id,
           et.task_id,
-
           t.title,
           t.description
-
         FROM employee_tasks et
 
         INNER JOIN tasks t
@@ -125,7 +138,6 @@ exports.getTasks = async (req, res) => {
       return res.json(result.rows);
     }
 
-
     // =====================================================
     // UNKNOWN ROLE
     // =====================================================
@@ -134,7 +146,6 @@ exports.getTasks = async (req, res) => {
     });
 
   } catch (error) {
-
     console.error("=================================");
     console.error("GET TASKS ERROR");
     console.error("message:", error.message);
@@ -151,6 +162,7 @@ exports.getTasks = async (req, res) => {
     });
   }
 };
+
 
 
 // =========================================================
