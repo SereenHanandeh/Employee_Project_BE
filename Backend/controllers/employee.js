@@ -598,3 +598,302 @@ exports.getDeletedEmployees = async (req, res) => {
     });
   }
 };
+
+/* =========================================================
+   UPDATE MY PROFILE
+   الموظف يستطيع تعديل معلوماته الشخصية فقط
+========================================================= */
+
+exports.updateMyProfile = async (req, res) => {
+  try {
+    // =====================================================
+    // CHECK USER
+    // =====================================================
+
+    if (req.user?.role !== "employee") {
+      return res.status(403).json({
+        message: "هذه العملية متاحة للموظفين فقط",
+      });
+    }
+
+    const employeeId =
+      req.user.employee_id || req.user.id;
+
+    if (!employeeId) {
+      return res.status(401).json({
+        message: "تعذر تحديد رقم الموظف",
+      });
+    }
+
+    // =====================================================
+    // DATA
+    // =====================================================
+
+    const { name, email } = req.body;
+
+    // =====================================================
+    // VALIDATION
+    // =====================================================
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        message: "الاسم مطلوب",
+      });
+    }
+
+    if (!email || !email.trim()) {
+      return res.status(400).json({
+        message: "الإيميل مطلوب",
+      });
+    }
+
+    const normalizedEmail =
+      email.trim().toLowerCase();
+
+    // =====================================================
+    // CHECK EMPLOYEE
+    // =====================================================
+
+    const employeeCheck = await pool.query(
+      `
+      SELECT employee_id
+      FROM employees
+      WHERE employee_id = $1
+        AND is_deleted = 0
+      LIMIT 1
+      `,
+      [employeeId]
+    );
+
+    if (employeeCheck.rows.length === 0) {
+      return res.status(404).json({
+        message: "الموظف غير موجود",
+      });
+    }
+
+    // =====================================================
+    // CHECK EMAIL
+    // =====================================================
+
+    const emailCheck = await pool.query(
+      `
+      SELECT employee_id
+      FROM employees
+      WHERE LOWER(email) = $1
+        AND employee_id != $2
+      LIMIT 1
+      `,
+      [
+        normalizedEmail,
+        employeeId,
+      ]
+    );
+
+    if (emailCheck.rows.length > 0) {
+      return res.status(400).json({
+        message: "الإيميل مستخدم مسبقاً",
+      });
+    }
+
+    // =====================================================
+    // UPDATE
+    // =====================================================
+
+    const result = await pool.query(
+      `
+      UPDATE employees
+      SET
+        name = $1,
+        email = $2
+      WHERE employee_id = $3
+        AND is_deleted = 0
+      RETURNING
+        employee_id,
+        name,
+        email,
+        department,
+        position,
+        role
+      `,
+      [
+        name.trim(),
+        normalizedEmail,
+        employeeId,
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "الموظف غير موجود",
+      });
+    }
+
+    return res.json({
+      message: "تم تحديث معلوماتك بنجاح",
+      employee: result.rows[0],
+    });
+
+  } catch (err) {
+    console.error(
+      "Update My Profile Error:",
+      err
+    );
+
+    return res.status(500).json({
+      message: "حدث خطأ أثناء تحديث المعلومات",
+    });
+  }
+};
+
+
+/* =========================================================
+   CHANGE MY PASSWORD
+   الموظف يستطيع تغيير كلمة مروره فقط
+========================================================= */
+
+exports.changeMyPassword = async (req, res) => {
+  try {
+    // =====================================================
+    // CHECK USER
+    // =====================================================
+
+    if (req.user?.role !== "employee") {
+      return res.status(403).json({
+        message: "هذه العملية متاحة للموظفين فقط",
+      });
+    }
+
+    const employeeId =
+      req.user.employee_id || req.user.id;
+
+    if (!employeeId) {
+      return res.status(401).json({
+        message: "تعذر تحديد رقم الموظف",
+      });
+    }
+
+    // =====================================================
+    // DATA
+    // =====================================================
+
+    const {
+      currentPassword,
+      newPassword,
+    } = req.body;
+
+    // =====================================================
+    // VALIDATION
+    // =====================================================
+
+    if (!currentPassword) {
+      return res.status(400).json({
+        message: "كلمة المرور الحالية مطلوبة",
+      });
+    }
+
+    if (!newPassword) {
+      return res.status(400).json({
+        message: "كلمة المرور الجديدة مطلوبة",
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        message:
+          "كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل",
+      });
+    }
+
+    if (currentPassword === newPassword) {
+      return res.status(400).json({
+        message:
+          "كلمة المرور الجديدة يجب أن تكون مختلفة عن الحالية",
+      });
+    }
+
+    // =====================================================
+    // GET CURRENT PASSWORD
+    // =====================================================
+
+    const result = await pool.query(
+      `
+      SELECT
+        employee_id,
+        password
+      FROM employees
+      WHERE employee_id = $1
+        AND is_deleted = 0
+      LIMIT 1
+      `,
+      [employeeId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "الموظف غير موجود",
+      });
+    }
+
+    const employee = result.rows[0];
+
+    // =====================================================
+    // VERIFY CURRENT PASSWORD
+    // =====================================================
+
+    const isPasswordValid =
+      await bcrypt.compare(
+        currentPassword,
+        employee.password
+      );
+
+    if (!isPasswordValid) {
+      return res.status(400).json({
+        message:
+          "كلمة المرور الحالية غير صحيحة",
+      });
+    }
+
+    // =====================================================
+    // HASH NEW PASSWORD
+    // =====================================================
+
+    const hashedPassword =
+      await bcrypt.hash(
+        newPassword,
+        10
+      );
+
+    // =====================================================
+    // UPDATE PASSWORD
+    // =====================================================
+
+    await pool.query(
+      `
+      UPDATE employees
+      SET password = $1
+      WHERE employee_id = $2
+        AND is_deleted = 0
+      `,
+      [
+        hashedPassword,
+        employeeId,
+      ]
+    );
+
+    return res.json({
+      message:
+        "تم تغيير كلمة المرور بنجاح",
+    });
+
+  } catch (err) {
+    console.error(
+      "Change My Password Error:",
+      err
+    );
+
+    return res.status(500).json({
+      message:
+        "حدث خطأ أثناء تغيير كلمة المرور",
+    });
+  }
+};

@@ -9,6 +9,8 @@ const {
   getMe,
   restoreEmployee,
   getDeletedEmployees,
+  updateMyProfile,
+  changeMyPassword,
 } = require("../controllers/employee");
 
 const auth = require("../middleware/auth");
@@ -27,8 +29,29 @@ employeeRouter.get(
 
 
 /* =========================================================
+   UPDATE MY PROFILE
+========================================================= */
+
+employeeRouter.put(
+  "/me",
+  auth,
+  updateMyProfile
+);
+
+
+/* =========================================================
+   CHANGE MY PASSWORD
+========================================================= */
+
+employeeRouter.put(
+  "/me/password",
+  auth,
+  changeMyPassword
+);
+
+
+/* =========================================================
    ACTIVE EMPLOYEES
-   يستخدمها Admin عند إنشاء إجازة
 ========================================================= */
 
 employeeRouter.get(
@@ -41,7 +64,6 @@ employeeRouter.get(
 
 /* =========================================================
    ALL EMPLOYEES
-   صفحة إدارة الموظفين
 ========================================================= */
 
 employeeRouter.get(
