@@ -42,7 +42,7 @@ exports.createEvaluation = async (req, res) => {
     // المجموع النهائي
     // =========================
     const total = totalPerformance + totalPersonality + totalRelations;
-    const maxTotal = 100;
+    const maxTotal = 104;
     const percentage = (total / maxTotal) * 100;
 
     // =========================
