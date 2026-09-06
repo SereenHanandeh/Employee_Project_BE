@@ -1,5 +1,29 @@
 
 const { pool } = require("../models/db");
+const cloudinary = require("../config/cloudinary");
+const streamifier = require("streamifier");
+
+const uploadToCloudinary = (file) => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: "leaves",
+        resource_type: "auto",
+      },
+      (error, result) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(result);
+        }
+      }
+    );
+
+    streamifier
+      .createReadStream(file.buffer)
+      .pipe(uploadStream);
+  });
+};
 
 // =====================================================
 // CREATE LEAVE
@@ -134,9 +158,20 @@ exports.createLeave = async (req, res) => {
     // المرفق
     // =====================================================
 
-    const attachment = req.file
-      ? `/uploads/leaves/${req.file.filename}`
-      : null;
+   let attachment = null;
+
+if (req.file) {
+  const cloudinaryResult = await uploadToCloudinary(
+    req.file
+  );
+
+  attachment = cloudinaryResult.secure_url;
+
+  console.log(
+    "Cloudinary URL:",
+    attachment
+  );
+}
 
     console.log("Employee ID:", targetEmployeeId);
     console.log("Type:", type);

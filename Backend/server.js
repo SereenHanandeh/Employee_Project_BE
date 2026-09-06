@@ -2,7 +2,6 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
-const path = require("path");
 
 const app = express();
 
@@ -15,12 +14,6 @@ app.use(cors());
 app.use(express.json());
 
 app.use(express.urlencoded({ extended: true }));
-
-// =============================
-// STATIC FILES
-// =============================
-
-app.use( "/uploads", express.static( path.join(__dirname, "uploads") ) );
 
 // =============================
 // PUBLIC ROUTES
@@ -43,6 +36,7 @@ const authMiddleware = require("./middleware/auth");
 // =============================
 
 // كل الـ routes التالية تحتاج JWT
+
 app.use(
   "/employees",
   authMiddleware,
@@ -84,8 +78,22 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
   console.error("SERVER ERROR:", err);
 
+  // أخطاء Multer
+  if (err.code === "LIMIT_FILE_SIZE") {
+    return res.status(400).json({
+      message: "حجم الملف يجب ألا يتجاوز 5 ميجابايت",
+    });
+  }
+
+  // خطأ نوع الملف
+  if (err.message?.includes("يسمح فقط برفع")) {
+    return res.status(400).json({
+      message: err.message,
+    });
+  }
+
   res.status(500).json({
-    message: "حدث خطأ في الخادم",
+    message: err.message || "حدث خطأ في الخادم",
   });
 });
 
@@ -96,7 +104,5 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(
-    `Server running on port ${PORT}`
-  );
+  console.log(`Server running on port ${PORT}`);
 });
