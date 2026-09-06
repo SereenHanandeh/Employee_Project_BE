@@ -9,6 +9,8 @@ const {
   getEmployees,
   getEmployeeTasks,
   removeTaskFromEmployee,
+   completeTask,
+  reopenTask,
 } = require("../controllers/task");
 
 const auth = require("../middleware/auth");
@@ -96,6 +98,30 @@ taskRouter.delete(
   auth,
   role("admin"),
   removeTaskFromEmployee
+);
+
+// =====================================================
+// COMPLETE TASK
+// Employee فقط
+// =====================================================
+
+taskRouter.put(
+  "/:employee_task_id/complete",
+  auth,
+  role("employee"),
+  completeTask
+);
+
+// =====================================================
+// REOPEN TASK
+// Employee فقط
+// =====================================================
+
+taskRouter.put(
+  "/:employee_task_id/reopen",
+  auth,
+  role("employee"),
+  reopenTask
 );
 
 module.exports = taskRouter;
