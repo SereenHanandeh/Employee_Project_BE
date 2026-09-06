@@ -5,36 +5,18 @@ const streamifier = require("streamifier");
 
 const uploadToCloudinary = (file) => {
   return new Promise((resolve, reject) => {
-    const resourceType =
-      file.mimetype === "application/pdf"
-        ? "raw"
-        : "image";
-
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: "leaves",
-        resource_type: resourceType,
+        resource_type: "image",
       },
       (error, result) => {
         if (error) {
-          console.error(
-            "CLOUDINARY UPLOAD ERROR:",
-            error
-          );
-          reject(error);
-        } else {
-          console.log(
-            "CLOUDINARY UPLOAD SUCCESS:",
-            {
-              secure_url: result.secure_url,
-              public_id: result.public_id,
-              resource_type: result.resource_type,
-              format: result.format,
-            }
-          );
-
-          resolve(result);
+          console.error("CLOUDINARY UPLOAD ERROR:", error);
+          return reject(error);
         }
+
+        resolve(result);
       }
     );
 
