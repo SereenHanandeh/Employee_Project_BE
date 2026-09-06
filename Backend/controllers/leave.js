@@ -3,19 +3,32 @@ const { pool } = require("../models/db");
 const cloudinary = require("../config/cloudinary");
 const streamifier = require("streamifier");
 
-const uploadToCloudinary = (file) => {
-  return new Promise((resolve, reject) => {
+const uploadToCloudinary = (file) =>
+  new Promise((resolve, reject) => {
+    const isPdf = file.mimetype === "application/pdf";
+
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: "leaves",
-        resource_type: "auto",
+        resource_type: isPdf ? "raw" : "image",
+        public_id: isPdf
+          ? undefined
+          : undefined,
       },
       (error, result) => {
         if (error) {
-          reject(error);
-        } else {
-          resolve(result);
+          console.error("CLOUDINARY UPLOAD ERROR:", error);
+          return reject(error);
         }
+
+        console.log("CLOUDINARY RESULT:", {
+          secure_url: result.secure_url,
+          public_id: result.public_id,
+          resource_type: result.resource_type,
+          format: result.format,
+        });
+
+        resolve(result);
       }
     );
 
@@ -23,7 +36,6 @@ const uploadToCloudinary = (file) => {
       .createReadStream(file.buffer)
       .pipe(uploadStream);
   });
-};
 
 // =====================================================
 // CREATE LEAVE
