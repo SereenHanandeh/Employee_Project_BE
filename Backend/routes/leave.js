@@ -9,6 +9,7 @@ const {
   updateLeaveStatus,
   updateLeave,
   getMyLeaves,
+  deleteLeave
 } = require("../controllers/leave");
 
 const auth = require("../middleware/auth");
@@ -60,6 +61,7 @@ leaveRouter.put(
   "/edit/:id",
   auth,
   role("admin"),
+  uploadLeave.single("attachment"),
   updateLeave
 );
 
@@ -73,6 +75,14 @@ leaveRouter.put(
   auth,
   role("admin"),
   updateLeaveStatus
+);
+
+
+leaveRouter.delete(
+  "/:id",
+  auth,
+  role("admin"),
+  deleteLeave
 );
 
 module.exports = leaveRouter;

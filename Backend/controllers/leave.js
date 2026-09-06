@@ -345,21 +345,28 @@ exports.getMyLeaves = async (req, res) => {
   }
 };
 
-
 // =====================================================
 // UPDATE LEAVE
+// Admin فقط
 // =====================================================
 
 exports.updateLeave = async (req, res) => {
   try {
     const { id } = req.params;
 
+    console.log("======================================");
+    console.log("UPDATE LEAVE");
+    console.log("ID:", id);
+    console.log("BODY:", req.body);
+    console.log("FILE:", req.file);
+    console.log("======================================");
+
     const {
       type,
       from_date,
       to_date,
       notes,
-    } = req.body;
+    } = req.body || {};
 
     // =====================================================
     // التحقق من البيانات
@@ -381,13 +388,8 @@ exports.updateLeave = async (req, res) => {
     // التحقق من التاريخ
     // =====================================================
 
-    const from = new Date(
-      `${from_date}T00:00:00`
-    );
-
-    const to = new Date(
-      `${to_date}T00:00:00`
-    );
+    const from = new Date(`${from_date}T00:00:00`);
+    const to = new Date(`${to_date}T00:00:00`);
 
     if (
       Number.isNaN(from.getTime()) ||
@@ -406,7 +408,7 @@ exports.updateLeave = async (req, res) => {
     }
 
     // =====================================================
-    // حساب الأيام
+    // حساب عدد الأيام
     // =====================================================
 
     const days =
@@ -414,6 +416,55 @@ exports.updateLeave = async (req, res) => {
         (to.getTime() - from.getTime()) /
           (1000 * 60 * 60 * 24)
       ) + 1;
+
+    if (days <= 0) {
+      return res.status(400).json({
+        message: "عدد أيام الإجازة غير صحيح",
+      });
+    }
+
+    // =====================================================
+    // جلب المرفق القديم
+    // =====================================================
+
+    const oldLeave = await pool.query(
+      `
+      SELECT attachment
+      FROM leaves
+      WHERE leave_id = $1
+      `,
+      [id]
+    );
+
+    if (oldLeave.rows.length === 0) {
+      return res.status(404).json({
+        message: "الإجازة غير موجودة",
+      });
+    }
+
+    let attachment =
+      oldLeave.rows[0].attachment || null;
+
+    // =====================================================
+    // رفع المرفق الجديد إلى Cloudinary
+    // =====================================================
+
+    if (req.file) {
+      console.log(
+        "Uploading new attachment to Cloudinary..."
+      );
+
+      const cloudinaryResult =
+        await uploadToCloudinary(req.file);
+
+      attachment =
+        cloudinaryResult.secure_url;
+
+      console.log(
+        "New Cloudinary URL:",
+        attachment
+      );
+    }
 
     // =====================================================
     // UPDATE
@@ -427,8 +478,9 @@ exports.updateLeave = async (req, res) => {
         from_date = $2,
         to_date = $3,
         days = $4,
-        notes = $5
-      WHERE leave_id = $6
+        notes = $5,
+        attachment = $6
+      WHERE leave_id = $7
       RETURNING *
       `,
       [
@@ -437,15 +489,10 @@ exports.updateLeave = async (req, res) => {
         to_date,
         days,
         notes?.trim() || null,
+        attachment,
         id,
       ]
     );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        message: "الإجازة غير موجودة",
-      });
-    }
 
     return res.json({
       message: "تم تعديل الإجازة بنجاح",
@@ -453,19 +500,29 @@ exports.updateLeave = async (req, res) => {
     });
 
   } catch (err) {
-    console.error(
-      "Update Leave Error:",
-      err
-    );
+    console.error("======================================");
+    console.error("UPDATE LEAVE ERROR:");
+    console.error(err);
+    console.error("======================================");
+
+    // =====================================================
+    // Multer - حجم الملف
+    // =====================================================
+
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({
+        message:
+          "حجم الملف يجب ألا يتجاوز 5 ميجابايت",
+      });
+    }
 
     return res.status(500).json({
       message:
         err.message ||
-        "Update Leave Error",
+        "فشل تعديل طلب الإجازة",
     });
   }
 };
-
 
 // =====================================================
 // UPDATE LEAVE STATUS
@@ -527,6 +584,46 @@ exports.updateLeaveStatus = async (req, res) => {
       message:
         err.message ||
         "Update Status Error",
+    });
+  }
+};
+
+// =====================================================
+// DELETE LEAVE
+// Admin فقط
+// =====================================================
+
+exports.deleteLeave = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `
+      DELETE FROM leaves
+      WHERE leave_id = $1
+      RETURNING *
+      `,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "الإجازة غير موجودة",
+      });
+    }
+
+    return res.json({
+      message: "تم حذف الإجازة بنجاح",
+      leave: result.rows[0],
+    });
+
+  } catch (err) {
+    console.error("Delete Leave Error:", err);
+
+    return res.status(500).json({
+      message:
+        err.message ||
+        "فشل حذف الإجازة",
     });
   }
 };
