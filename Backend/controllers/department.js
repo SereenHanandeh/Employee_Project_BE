@@ -57,21 +57,27 @@ const getActiveDepartments = async (req, res) => {
     const result = await pool.query(`
       SELECT
         department_id,
-        name
+        name,
+        is_deleted
       FROM departments
-      WHERE is_deleted = 0
-      ORDER BY LOWER(name) ASC
+      ORDER BY department_id ASC
     `);
+
+    console.log("✅ Departments DB Result:", result.rows);
 
     res.json(result.rows);
   } catch (error) {
-    console.error(
-      "Get Active Departments Error:",
-      error
-    );
+    console.error("❌ Get Active Departments Error");
+    console.error("message:", error.message);
+    console.error("code:", error.code);
+    console.error("detail:", error.detail);
+    console.error("hint:", error.hint);
+    console.error("stack:", error.stack);
 
     res.status(500).json({
       message: "حدث خطأ أثناء تحميل الأقسام الفعالة",
+      error: error.message,
+      code: error.code,
     });
   }
 };
