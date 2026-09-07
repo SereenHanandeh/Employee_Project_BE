@@ -1,4 +1,3 @@
-
 const express = require("express");
 
 const leaveRouter = express.Router();
@@ -9,12 +8,13 @@ const {
   updateLeaveStatus,
   updateLeave,
   getMyLeaves,
-  deleteLeave
+  deleteLeave,
+  getDeletedLeaves,
+  restoreLeave,
 } = require("../controllers/leave");
 
 const auth = require("../middleware/auth");
 const role = require("../middleware/role");
-
 const uploadLeave = require("../middleware/uploadLeave");
 
 // =====================================================
@@ -30,7 +30,7 @@ leaveRouter.post(
 );
 
 // =====================================================
-// GET ALL LEAVES
+// GET ALL ACTIVE LEAVES
 // Admin فقط
 // =====================================================
 
@@ -39,6 +39,18 @@ leaveRouter.get(
   auth,
   role("admin"),
   getLeaves
+);
+
+// =====================================================
+// GET DELETED LEAVES
+// Admin فقط
+// =====================================================
+
+leaveRouter.get(
+  "/deleted",
+  auth,
+  role("admin"),
+  getDeletedLeaves
 );
 
 // =====================================================
@@ -77,6 +89,22 @@ leaveRouter.put(
   updateLeaveStatus
 );
 
+// =====================================================
+// RESTORE DELETED LEAVE
+// Admin فقط
+// =====================================================
+
+leaveRouter.put(
+  "/restore/:id",
+  auth,
+  role("admin"),
+  restoreLeave
+);
+
+// =====================================================
+// SOFT DELETE LEAVE
+// Admin فقط
+// =====================================================
 
 leaveRouter.delete(
   "/:id",

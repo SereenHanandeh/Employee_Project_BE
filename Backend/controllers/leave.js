@@ -254,8 +254,10 @@ if (req.file) {
 };
 
 
+
 // =====================================================
-// GET ALL LEAVES
+// GET ALL ACTIVE LEAVES
+// Admin فقط
 // =====================================================
 
 exports.getLeaves = async (req, res) => {
@@ -272,22 +274,20 @@ exports.getLeaves = async (req, res) => {
         l.notes,
         l.attachment,
         l.status,
+        l.is_deleted,
         emp.name
       FROM leaves l
       JOIN employees emp
         ON l.employee_id = emp.employee_id
-      WHERE emp.is_deleted = 0
+      WHERE l.is_deleted = 0
+        AND emp.is_deleted = 0
       ORDER BY l.leave_id DESC
       `
     );
 
     return res.json(result.rows);
-
   } catch (err) {
-    console.error(
-      "Get Leaves Error:",
-      err
-    );
+    console.error("Get Leaves Error:", err);
 
     return res.status(500).json({
       message: "Fetch Leaves Error",
@@ -298,6 +298,7 @@ exports.getLeaves = async (req, res) => {
 
 // =====================================================
 // GET MY LEAVES
+// Employee + Admin
 // =====================================================
 
 exports.getMyLeaves = async (req, res) => {
@@ -323,16 +324,17 @@ exports.getMyLeaves = async (req, res) => {
         days,
         notes,
         attachment,
-        status
+        status,
+        is_deleted
       FROM leaves
       WHERE employee_id = $1
+        AND is_deleted = 0
       ORDER BY leave_id DESC
       `,
       [employeeId]
     );
 
     return res.json(result.rows);
-
   } catch (err) {
     console.error(
       "Get My Leaves Error:",
@@ -589,7 +591,7 @@ exports.updateLeaveStatus = async (req, res) => {
 };
 
 // =====================================================
-// DELETE LEAVE
+// SOFT DELETE LEAVE
 // Admin فقط
 // =====================================================
 
@@ -599,8 +601,10 @@ exports.deleteLeave = async (req, res) => {
 
     const result = await pool.query(
       `
-      DELETE FROM leaves
+      UPDATE leaves
+      SET is_deleted = 1
       WHERE leave_id = $1
+        AND is_deleted = 0
       RETURNING *
       `,
       [id]
@@ -608,22 +612,107 @@ exports.deleteLeave = async (req, res) => {
 
     if (result.rows.length === 0) {
       return res.status(404).json({
-        message: "الإجازة غير موجودة",
+        message: "الإجازة غير موجودة أو موجودة في سلة المحذوفات",
       });
     }
 
     return res.json({
-      message: "تم حذف الإجازة بنجاح",
+      message: "تم نقل الإجازة إلى سلة المحذوفات",
       leave: result.rows[0],
     });
-
   } catch (err) {
     console.error("Delete Leave Error:", err);
 
     return res.status(500).json({
       message:
         err.message ||
-        "فشل حذف الإجازة",
+        "فشل نقل الإجازة إلى سلة المحذوفات",
+    });
+  }
+};
+
+// =====================================================
+// GET DELETED LEAVES
+// Admin فقط
+// =====================================================
+
+exports.getDeletedLeaves = async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        l.leave_id,
+        l.employee_id,
+        l.type,
+        l.from_date,
+        l.to_date,
+        l.days,
+        l.notes,
+        l.attachment,
+        l.status,
+        l.is_deleted,
+        emp.name
+      FROM leaves l
+      JOIN employees emp
+        ON l.employee_id = emp.employee_id
+      WHERE l.is_deleted = 1
+      ORDER BY l.leave_id DESC
+      `
+    );
+
+    return res.json(result.rows);
+  } catch (err) {
+    console.error(
+      "Get Deleted Leaves Error:",
+      err
+    );
+
+    return res.status(500).json({
+      message: "Fetch Deleted Leaves Error",
+    });
+  }
+};
+
+// =====================================================
+// RESTORE LEAVE
+// Admin فقط
+// =====================================================
+
+exports.restoreLeave = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `
+      UPDATE leaves
+      SET is_deleted = 0
+      WHERE leave_id = $1
+        AND is_deleted = 1
+      RETURNING *
+      `,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "الإجازة غير موجودة في سلة المحذوفات",
+      });
+    }
+
+    return res.json({
+      message: "تم استرجاع الإجازة بنجاح",
+      leave: result.rows[0],
+    });
+  } catch (err) {
+    console.error(
+      "Restore Leave Error:",
+      err
+    );
+
+    return res.status(500).json({
+      message:
+        err.message ||
+        "فشل استرجاع الإجازة",
     });
   }
 };
