@@ -16,7 +16,6 @@ const {
 const auth = require("../middleware/auth");
 const isAdmin = require("../middleware/isAdmin");
 
-
 /* =========================================================
    CURRENT USER
 ========================================================= */
@@ -26,7 +25,6 @@ employeeRouter.get(
   auth,
   getMe
 );
-
 
 /* =========================================================
    UPDATE MY PROFILE
@@ -38,7 +36,6 @@ employeeRouter.put(
   updateMyProfile
 );
 
-
 /* =========================================================
    CHANGE MY PASSWORD
 ========================================================= */
@@ -48,7 +45,6 @@ employeeRouter.put(
   auth,
   changeMyPassword
 );
-
 
 /* =========================================================
    ACTIVE EMPLOYEES
@@ -61,7 +57,6 @@ employeeRouter.get(
   getActiveEmployees
 );
 
-
 /* =========================================================
    ALL EMPLOYEES
 ========================================================= */
@@ -72,7 +67,6 @@ employeeRouter.get(
   isAdmin,
   getEmployees
 );
-
 
 /* =========================================================
    CREATE EMPLOYEE
@@ -85,7 +79,6 @@ employeeRouter.post(
   createEmployee
 );
 
-
 /* =========================================================
    DELETE EMPLOYEE
 ========================================================= */
@@ -96,7 +89,6 @@ employeeRouter.delete(
   isAdmin,
   deleteEmployee
 );
-
 
 /* =========================================================
    UPDATE EMPLOYEE
@@ -109,7 +101,6 @@ employeeRouter.put(
   updateEmployee
 );
 
-
 /* =========================================================
    RESTORE EMPLOYEE
 ========================================================= */
@@ -121,7 +112,6 @@ employeeRouter.put(
   restoreEmployee
 );
 
-
 /* =========================================================
    DELETED EMPLOYEES
 ========================================================= */
@@ -132,6 +122,5 @@ employeeRouter.get(
   isAdmin,
   getDeletedEmployees
 );
-
 
 module.exports = employeeRouter;

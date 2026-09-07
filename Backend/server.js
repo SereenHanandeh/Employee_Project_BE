@@ -30,6 +30,7 @@ app.use(
 // =============================
 
 const authMiddleware = require("./middleware/auth");
+const departmentRouter = require("./routes/department");
 
 // =============================
 // PROTECTED ROUTES
@@ -59,6 +60,12 @@ app.use(
   "/tasks",
   authMiddleware,
   require("./routes/task")
+);
+
+app.use(
+  "/departments",
+  authMiddleware,
+  require("./routes/department")
 );
 
 // =============================
