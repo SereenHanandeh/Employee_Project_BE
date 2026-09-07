@@ -1,4 +1,4 @@
-const pool = require("../models/db");
+const { pool } = require("../models/db");
 
 // =========================================================
 // GET ALL DEPARTMENTS
