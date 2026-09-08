@@ -8,6 +8,13 @@ exports.createTask = async (req, res) => {
   const client = await pool.connect();
 
   try {
+    try {
+    console.log("=================================");
+    console.log("CREATE TASK REQUEST");
+    console.log("BODY:", JSON.stringify(req.body, null, 2));
+    console.log("USER:", req.user);
+    console.log("=================================");
+
     const {
       title,
       description,

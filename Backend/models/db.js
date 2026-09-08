@@ -208,8 +208,12 @@ ON task_stages(task_id);
 
 CREATE INDEX IF NOT EXISTS idx_task_stages_completed
 ON task_stages(completed);
+
+
+
   `;
 
+  
   try {
     await pool.query(query);
 
