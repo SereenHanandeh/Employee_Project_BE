@@ -8,19 +8,13 @@ exports.createTask = async (req, res) => {
   const client = await pool.connect();
 
   try {
-    try {
     console.log("=================================");
     console.log("CREATE TASK REQUEST");
     console.log("BODY:", JSON.stringify(req.body, null, 2));
     console.log("USER:", req.user);
     console.log("=================================");
 
-    const {
-      title,
-      description,
-      due_date,
-      stages,
-    } = req.body;
+    const { title, description, due_date, stages } = req.body;
 
     // =====================================================
     // VALIDATION
@@ -99,11 +93,7 @@ exports.createTask = async (req, res) => {
       VALUES ($1, $2, $3)
       RETURNING *
       `,
-      [
-        title.trim(),
-        description?.trim() || null,
-        due_date,
-      ]
+      [title.trim(), description?.trim() || null, due_date],
     );
 
     const task = taskResult.rows[0];
@@ -133,7 +123,7 @@ exports.createTask = async (req, res) => {
           stage.description,
           stage.due_date,
           stage.stage_order,
-        ]
+        ],
       );
 
       createdStages.push(stageResult.rows[0]);
@@ -146,7 +136,6 @@ exports.createTask = async (req, res) => {
       task,
       stages: createdStages,
     });
-
   } catch (error) {
     try {
       await client.query("ROLLBACK");
@@ -167,12 +156,10 @@ exports.createTask = async (req, res) => {
       code: error.code,
       detail: error.detail,
     });
-
   } finally {
     client.release();
   }
 };
-
 
 // =========================================================
 // GET TASKS
@@ -187,7 +174,6 @@ exports.getTasks = async (req, res) => {
     // =====================================================
 
     if (req.user?.role === "admin") {
-
       const result = await pool.query(`
         SELECT
           t.task_id,
@@ -291,16 +277,12 @@ exports.getTasks = async (req, res) => {
       return res.json(result.rows);
     }
 
-
     // =====================================================
     // EMPLOYEE
     // =====================================================
 
     if (req.user?.role === "employee") {
-
-      const employeeId =
-        req.user.employee_id ||
-        req.user.id;
+      const employeeId = req.user.employee_id || req.user.id;
 
       if (!employeeId) {
         return res.status(400).json({
@@ -370,12 +352,11 @@ exports.getTasks = async (req, res) => {
 
         ORDER BY et.id DESC
         `,
-        [employeeId]
+        [employeeId],
       );
 
       return res.json(result.rows);
     }
-
 
     // =====================================================
     // UNKNOWN ROLE
@@ -384,9 +365,7 @@ exports.getTasks = async (req, res) => {
     return res.status(403).json({
       message: "غير مصرح لك بالوصول إلى المهام",
     });
-
   } catch (error) {
-
     console.error("=================================");
     console.error("GET TASKS ERROR");
     console.error("message:", error.message);
@@ -404,14 +383,12 @@ exports.getTasks = async (req, res) => {
   }
 };
 
-
 // =========================================================
 // GET EMPLOYEES
 // =========================================================
 
 exports.getEmployees = async (req, res) => {
   try {
-
     const result = await pool.query(
       `
       SELECT
@@ -421,13 +398,11 @@ exports.getEmployees = async (req, res) => {
       FROM employees
       WHERE is_deleted = 0
       ORDER BY name ASC
-      `
+      `,
     );
 
     return res.json(result.rows);
-
   } catch (error) {
-
     console.error("=================================");
     console.error("GET EMPLOYEES ERROR");
     console.error("message:", error.message);
@@ -444,17 +419,14 @@ exports.getEmployees = async (req, res) => {
   }
 };
 
-
 // =========================================================
 // ASSIGN TASK TO MULTIPLE EMPLOYEES
 // =========================================================
 
 exports.assignTask = async (req, res) => {
-
   const client = await pool.connect();
 
   try {
-
     console.log("=================================");
     console.log("ASSIGN TASK START");
     console.log("USER:", req.user);
@@ -471,11 +443,7 @@ exports.assignTask = async (req, res) => {
       });
     }
 
-    const {
-      employee_ids,
-      employee_id,
-      task_id,
-    } = req.body;
+    const { employee_ids, employee_id, task_id } = req.body;
 
     // =====================================================
     // SUPPORT OLD + NEW FORMAT
@@ -493,11 +461,7 @@ exports.assignTask = async (req, res) => {
       ...new Set(
         employeeIds
           .map((id) => Number(id))
-          .filter(
-            (id) =>
-              Number.isInteger(id) &&
-              id > 0
-          )
+          .filter((id) => Number.isInteger(id) && id > 0),
       ),
     ];
 
@@ -513,10 +477,7 @@ exports.assignTask = async (req, res) => {
       });
     }
 
-    if (
-      !Number.isInteger(taskId) ||
-      taskId <= 0
-    ) {
+    if (!Number.isInteger(taskId) || taskId <= 0) {
       return res.status(400).json({
         message: "معرف المهمة غير صحيح",
       });
@@ -536,7 +497,7 @@ exports.assignTask = async (req, res) => {
       FROM tasks
       WHERE task_id = $1
       `,
-      [taskId]
+      [taskId],
     );
 
     if (taskResult.rows.length === 0) {
@@ -562,7 +523,7 @@ exports.assignTask = async (req, res) => {
       WHERE task_id = $1
       ORDER BY stage_order ASC
       `,
-      [taskId]
+      [taskId],
     );
 
     if (stagesResult.rows.length === 0) {
@@ -586,16 +547,12 @@ exports.assignTask = async (req, res) => {
         AND is_deleted = 0
       ORDER BY name ASC
       `,
-      [employeeIds]
+      [employeeIds],
     );
 
-    if (
-      employeesResult.rows.length !==
-      employeeIds.length
-    ) {
+    if (employeesResult.rows.length !== employeeIds.length) {
       return res.status(400).json({
-        message:
-          "بعض الموظفين المحددين غير موجودين أو محذوفين",
+        message: "بعض الموظفين المحددين غير موجودين أو محذوفين",
       });
     }
 
@@ -614,7 +571,7 @@ exports.assignTask = async (req, res) => {
       DELETE FROM employee_tasks
       WHERE task_id = $1
       `,
-      [taskId]
+      [taskId],
     );
 
     // =====================================================
@@ -624,10 +581,8 @@ exports.assignTask = async (req, res) => {
     const assignments = [];
 
     for (const employeeId of employeeIds) {
-
-      const assignmentResult =
-        await client.query(
-          `
+      const assignmentResult = await client.query(
+        `
           INSERT INTO employee_tasks (
             employee_id,
             task_id,
@@ -641,14 +596,10 @@ exports.assignTask = async (req, res) => {
             status,
             selected_at
           `,
-          [
-            employeeId,
-            taskId,
-          ]
-        );
+        [employeeId, taskId],
+      );
 
-      const assignment =
-        assignmentResult.rows[0];
+      const assignment = assignmentResult.rows[0];
 
       assignments.push(assignment);
 
@@ -657,7 +608,6 @@ exports.assignTask = async (req, res) => {
       // ===================================================
 
       for (const stage of stagesResult.rows) {
-
         await client.query(
           `
           INSERT INTO employee_task_stages (
@@ -668,20 +618,14 @@ exports.assignTask = async (req, res) => {
           )
           VALUES ($1, $2, 0, NULL)
           `,
-          [
-            assignment.id,
-            stage.stage_id,
-          ]
+          [assignment.id, stage.stage_id],
         );
       }
     }
 
     await client.query("COMMIT");
 
-    console.log(
-      "ASSIGNMENTS CREATED:",
-      assignments
-    );
+    console.log("ASSIGNMENTS CREATED:", assignments);
 
     return res.status(201).json({
       message: "تم تعيين المهمة للموظفين بنجاح",
@@ -692,16 +636,11 @@ exports.assignTask = async (req, res) => {
 
       assignments,
     });
-
   } catch (error) {
-
     try {
       await client.query("ROLLBACK");
     } catch (rollbackError) {
-      console.error(
-        "ROLLBACK ERROR:",
-        rollbackError
-      );
+      console.error("ROLLBACK ERROR:", rollbackError);
     }
 
     console.error("=================================");
@@ -726,32 +665,24 @@ exports.assignTask = async (req, res) => {
       table: error.table,
       column: error.column,
     });
-
   } finally {
     client.release();
   }
 };
-
 
 // =========================================================
 // GET EMPLOYEE TASKS
 // =========================================================
 
 exports.getEmployeeTasks = async (req, res) => {
-
   try {
-
-    const employeeId =
-      Number(req.params.employee_id);
+    const employeeId = Number(req.params.employee_id);
 
     // =====================================================
     // VALIDATION
     // =====================================================
 
-    if (
-      !Number.isInteger(employeeId) ||
-      employeeId <= 0
-    ) {
+    if (!Number.isInteger(employeeId) || employeeId <= 0) {
       return res.status(400).json({
         message: "معرف الموظف غير صحيح",
       });
@@ -761,9 +692,8 @@ exports.getEmployeeTasks = async (req, res) => {
     // CHECK EMPLOYEE
     // =====================================================
 
-    const employeeResult =
-      await pool.query(
-        `
+    const employeeResult = await pool.query(
+      `
         SELECT
           employee_id,
           name,
@@ -772,8 +702,8 @@ exports.getEmployeeTasks = async (req, res) => {
         WHERE employee_id = $1
           AND is_deleted = 0
         `,
-        [employeeId]
-      );
+      [employeeId],
+    );
 
     if (employeeResult.rows.length === 0) {
       return res.status(404).json({
@@ -843,17 +773,12 @@ exports.getEmployeeTasks = async (req, res) => {
 
       ORDER BY et.id DESC
       `,
-      [employeeId]
+      [employeeId],
     );
 
     return res.json(result.rows);
-
   } catch (error) {
-
-    console.error(
-      "GET EMPLOYEE TASKS ERROR:",
-      error
-    );
+    console.error("GET EMPLOYEE TASKS ERROR:", error);
 
     return res.status(500).json({
       message: "فشل تحميل مهام الموظف",
@@ -865,43 +790,29 @@ exports.getEmployeeTasks = async (req, res) => {
   }
 };
 
-
 // =========================================================
 // COMPLETE STAGE
 // =========================================================
 
 exports.completeStage = async (req, res) => {
-
   const client = await pool.connect();
 
   try {
+    const stageId = Number(req.params.stage_id);
 
-    const stageId =
-      Number(req.params.stage_id);
-
-    const employeeId =
-      Number(
-        req.user?.employee_id ||
-        req.user?.id
-      );
+    const employeeId = Number(req.user?.employee_id || req.user?.id);
 
     // =====================================================
     // VALIDATION
     // =====================================================
 
-    if (
-      !Number.isInteger(stageId) ||
-      stageId <= 0
-    ) {
+    if (!Number.isInteger(stageId) || stageId <= 0) {
       return res.status(400).json({
         message: "معرف المرحلة غير صحيح",
       });
     }
 
-    if (
-      !Number.isInteger(employeeId) ||
-      employeeId <= 0
-    ) {
+    if (!Number.isInteger(employeeId) || employeeId <= 0) {
       return res.status(400).json({
         message: "معرف الموظف غير موجود",
       });
@@ -938,24 +849,18 @@ exports.completeStage = async (req, res) => {
       WHERE ets.stage_id = $1
         AND et.employee_id = $2
       `,
-      [
-        stageId,
-        employeeId,
-      ]
+      [stageId, employeeId],
     );
 
     if (stageResult.rows.length === 0) {
-
       await client.query("ROLLBACK");
 
       return res.status(404).json({
-        message:
-          "المرحلة غير موجودة أو غير مرتبطة بهذا الموظف",
+        message: "المرحلة غير موجودة أو غير مرتبطة بهذا الموظف",
       });
     }
 
-    const stage =
-      stageResult.rows[0];
+    const stage = stageResult.rows[0];
 
     // =====================================================
     // COMPLETE STAGE
@@ -970,7 +875,7 @@ exports.completeStage = async (req, res) => {
       WHERE id = $1
       RETURNING *
       `,
-      [stage.id]
+      [stage.id],
     );
 
     // =====================================================
@@ -989,25 +894,21 @@ exports.completeStage = async (req, res) => {
       FROM employee_task_stages
       WHERE employee_task_id = $1
       `,
-      [stage.employee_task_id]
+      [stage.employee_task_id],
     );
 
-    const progress =
-      progressResult.rows[0];
+    const progress = progressResult.rows[0];
 
-    const totalStages =
-      Number(progress.total_stages);
+    const totalStages = Number(progress.total_stages);
 
-    const completedStages =
-      Number(progress.completed_stages);
+    const completedStages = Number(progress.completed_stages);
 
     // =====================================================
     // UPDATE TASK STATUS
     // =====================================================
 
     const taskStatus =
-      totalStages > 0 &&
-      completedStages === totalStages
+      totalStages > 0 && completedStages === totalStages
         ? "completed"
         : "pending";
 
@@ -1017,10 +918,7 @@ exports.completeStage = async (req, res) => {
       SET status = $1
       WHERE id = $2
       `,
-      [
-        taskStatus,
-        stage.employee_task_id,
-      ]
+      [taskStatus, stage.employee_task_id],
     );
 
     await client.query("COMMIT");
@@ -1039,74 +937,50 @@ exports.completeStage = async (req, res) => {
 
       completed_stages: completedStages,
     });
-
   } catch (error) {
-
     try {
       await client.query("ROLLBACK");
     } catch (rollbackError) {
-      console.error(
-        "ROLLBACK ERROR:",
-        rollbackError
-      );
+      console.error("ROLLBACK ERROR:", rollbackError);
     }
 
-    console.error(
-      "COMPLETE STAGE ERROR:",
-      error
-    );
+    console.error("COMPLETE STAGE ERROR:", error);
 
     return res.status(500).json({
-      message:
-        "حدث خطأ أثناء إكمال المرحلة",
+      message: "حدث خطأ أثناء إكمال المرحلة",
 
       error: error.message,
       code: error.code,
       detail: error.detail,
     });
-
   } finally {
     client.release();
   }
 };
-
 
 // =========================================================
 // REOPEN STAGE
 // =========================================================
 
 exports.reopenStage = async (req, res) => {
-
   const client = await pool.connect();
 
   try {
+    const stageId = Number(req.params.stage_id);
 
-    const stageId =
-      Number(req.params.stage_id);
-
-    const employeeId =
-      Number(
-        req.user?.employee_id ||
-        req.user?.id
-      );
+    const employeeId = Number(req.user?.employee_id || req.user?.id);
 
     // =====================================================
     // VALIDATION
     // =====================================================
 
-    if (
-      !Number.isInteger(stageId) ||
-      stageId <= 0
-    ) {
+    if (!Number.isInteger(stageId) || stageId <= 0) {
       return res.status(400).json({
         message: "معرف المرحلة غير صحيح",
       });
     }
 
-    if (
-      !Number.isInteger(employeeId) ||
-      employeeId <= 0
-    ) {
+    if (!Number.isInteger(employeeId) || employeeId <= 0) {
       return res.status(400).json({
         message: "معرف الموظف غير موجود",
       });
@@ -1135,24 +1009,18 @@ exports.reopenStage = async (req, res) => {
       WHERE ets.stage_id = $1
         AND et.employee_id = $2
       `,
-      [
-        stageId,
-        employeeId,
-      ]
+      [stageId, employeeId],
     );
 
     if (stageResult.rows.length === 0) {
-
       await client.query("ROLLBACK");
 
       return res.status(404).json({
-        message:
-          "المرحلة غير موجودة أو غير مرتبطة بهذا الموظف",
+        message: "المرحلة غير موجودة أو غير مرتبطة بهذا الموظف",
       });
     }
 
-    const stage =
-      stageResult.rows[0];
+    const stage = stageResult.rows[0];
 
     // =====================================================
     // REOPEN
@@ -1167,7 +1035,7 @@ exports.reopenStage = async (req, res) => {
       WHERE id = $1
       RETURNING *
       `,
-      [stage.id]
+      [stage.id],
     );
 
     // =====================================================
@@ -1180,50 +1048,38 @@ exports.reopenStage = async (req, res) => {
       SET status = 'pending'
       WHERE id = $1
       `,
-      [stage.employee_task_id]
+      [stage.employee_task_id],
     );
 
     await client.query("COMMIT");
 
     return res.json({
-      message:
-        "تم إعادة المرحلة إلى غير مكتملة",
+      message: "تم إعادة المرحلة إلى غير مكتملة",
 
       stage: result.rows[0],
 
       task_status: "pending",
     });
-
   } catch (error) {
-
     try {
       await client.query("ROLLBACK");
     } catch (rollbackError) {
-      console.error(
-        "ROLLBACK ERROR:",
-        rollbackError
-      );
+      console.error("ROLLBACK ERROR:", rollbackError);
     }
 
-    console.error(
-      "REOPEN STAGE ERROR:",
-      error
-    );
+    console.error("REOPEN STAGE ERROR:", error);
 
     return res.status(500).json({
-      message:
-        "حدث خطأ أثناء إعادة فتح المرحلة",
+      message: "حدث خطأ أثناء إعادة فتح المرحلة",
 
       error: error.message,
       code: error.code,
       detail: error.detail,
     });
-
   } finally {
     client.release();
   }
 };
-
 
 // =========================================================
 // OLD COMPLETE TASK
@@ -1232,37 +1088,20 @@ exports.reopenStage = async (req, res) => {
 // =========================================================
 
 exports.completeTask = async (req, res) => {
-
   try {
+    const employeeTaskId = Number(req.params.employee_task_id);
 
-    const employeeTaskId =
-      Number(
-        req.params.employee_task_id
-      );
+    const employeeId = Number(req.user?.employee_id || req.user?.id);
 
-    const employeeId =
-      Number(
-        req.user?.employee_id ||
-        req.user?.id
-      );
-
-    if (
-      !Number.isInteger(employeeTaskId) ||
-      employeeTaskId <= 0
-    ) {
+    if (!Number.isInteger(employeeTaskId) || employeeTaskId <= 0) {
       return res.status(400).json({
-        message:
-          "معرف تعيين المهمة غير صحيح",
+        message: "معرف تعيين المهمة غير صحيح",
       });
     }
 
-    if (
-      !Number.isInteger(employeeId) ||
-      employeeId <= 0
-    ) {
+    if (!Number.isInteger(employeeId) || employeeId <= 0) {
       return res.status(400).json({
-        message:
-          "معرف الموظف غير موجود",
+        message: "معرف الموظف غير موجود",
       });
     }
 
@@ -1282,28 +1121,21 @@ exports.completeTask = async (req, res) => {
       FROM employee_task_stages
       WHERE employee_task_id = $1
       `,
-      [employeeTaskId]
+      [employeeTaskId],
     );
 
-    const {
-      total_stages,
-      completed_stages,
-    } = progressResult.rows[0];
+    const { total_stages, completed_stages } = progressResult.rows[0];
 
     if (
       Number(total_stages) === 0 ||
-      Number(completed_stages) !==
-        Number(total_stages)
+      Number(completed_stages) !== Number(total_stages)
     ) {
       return res.status(400).json({
-        message:
-          "لا يمكن إنهاء المهمة قبل إكمال جميع المراحل",
+        message: "لا يمكن إنهاء المهمة قبل إكمال جميع المراحل",
 
-        total_stages:
-          Number(total_stages),
+        total_stages: Number(total_stages),
 
-        completed_stages:
-          Number(completed_stages),
+        completed_stages: Number(completed_stages),
       });
     }
 
@@ -1315,37 +1147,25 @@ exports.completeTask = async (req, res) => {
         AND employee_id = $2
       RETURNING *
       `,
-      [
-        employeeTaskId,
-        employeeId,
-      ]
+      [employeeTaskId, employeeId],
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({
-        message:
-          "المهمة غير موجودة أو غير مرتبطة بهذا الموظف",
+        message: "المهمة غير موجودة أو غير مرتبطة بهذا الموظف",
       });
     }
 
     return res.json({
-      message:
-        "تم إنهاء المهمة بنجاح",
+      message: "تم إنهاء المهمة بنجاح",
 
-      task:
-        result.rows[0],
+      task: result.rows[0],
     });
-
   } catch (error) {
-
-    console.error(
-      "COMPLETE TASK ERROR:",
-      error
-    );
+    console.error("COMPLETE TASK ERROR:", error);
 
     return res.status(500).json({
-      message:
-        "حدث خطأ أثناء إنهاء المهمة",
+      message: "حدث خطأ أثناء إنهاء المهمة",
 
       error: error.message,
       code: error.code,
@@ -1354,43 +1174,25 @@ exports.completeTask = async (req, res) => {
   }
 };
 
-
 // =========================================================
 // OLD REOPEN TASK
 // =========================================================
 
 exports.reopenTask = async (req, res) => {
-
   try {
+    const employeeTaskId = Number(req.params.employee_task_id);
 
-    const employeeTaskId =
-      Number(
-        req.params.employee_task_id
-      );
+    const employeeId = Number(req.user?.employee_id || req.user?.id);
 
-    const employeeId =
-      Number(
-        req.user?.employee_id ||
-        req.user?.id
-      );
-
-    if (
-      !Number.isInteger(employeeTaskId) ||
-      employeeTaskId <= 0
-    ) {
+    if (!Number.isInteger(employeeTaskId) || employeeTaskId <= 0) {
       return res.status(400).json({
-        message:
-          "معرف تعيين المهمة غير صحيح",
+        message: "معرف تعيين المهمة غير صحيح",
       });
     }
 
-    if (
-      !Number.isInteger(employeeId) ||
-      employeeId <= 0
-    ) {
+    if (!Number.isInteger(employeeId) || employeeId <= 0) {
       return res.status(400).json({
-        message:
-          "معرف الموظف غير موجود",
+        message: "معرف الموظف غير موجود",
       });
     }
 
@@ -1402,7 +1204,7 @@ exports.reopenTask = async (req, res) => {
         completed_at = NULL
       WHERE employee_task_id = $1
       `,
-      [employeeTaskId]
+      [employeeTaskId],
     );
 
     const result = await pool.query(
@@ -1413,37 +1215,25 @@ exports.reopenTask = async (req, res) => {
         AND employee_id = $2
       RETURNING *
       `,
-      [
-        employeeTaskId,
-        employeeId,
-      ]
+      [employeeTaskId, employeeId],
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({
-        message:
-          "المهمة غير موجودة أو غير مرتبطة بهذا الموظف",
+        message: "المهمة غير موجودة أو غير مرتبطة بهذا الموظف",
       });
     }
 
     return res.json({
-      message:
-        "تم إعادة المهمة إلى غير مكتملة",
+      message: "تم إعادة المهمة إلى غير مكتملة",
 
-      task:
-        result.rows[0],
+      task: result.rows[0],
     });
-
   } catch (error) {
-
-    console.error(
-      "REOPEN TASK ERROR:",
-      error
-    );
+    console.error("REOPEN TASK ERROR:", error);
 
     return res.status(500).json({
-      message:
-        "حدث خطأ أثناء إعادة فتح المهمة",
+      message: "حدث خطأ أثناء إعادة فتح المهمة",
 
       error: error.message,
       code: error.code,
@@ -1452,30 +1242,17 @@ exports.reopenTask = async (req, res) => {
   }
 };
 
-
 // =========================================================
 // REMOVE TASK FROM EMPLOYEE
 // =========================================================
 
-exports.removeTaskFromEmployee = async (
-  req,
-  res
-) => {
-
+exports.removeTaskFromEmployee = async (req, res) => {
   try {
+    const employeeTaskId = Number(req.params.employee_task_id);
 
-    const employeeTaskId =
-      Number(
-        req.params.employee_task_id
-      );
-
-    if (
-      !Number.isInteger(employeeTaskId) ||
-      employeeTaskId <= 0
-    ) {
+    if (!Number.isInteger(employeeTaskId) || employeeTaskId <= 0) {
       return res.status(400).json({
-        message:
-          "معرف تعيين المهمة غير صحيح",
+        message: "معرف تعيين المهمة غير صحيح",
       });
     }
 
@@ -1485,34 +1262,25 @@ exports.removeTaskFromEmployee = async (
       WHERE id = $1
       RETURNING *
       `,
-      [employeeTaskId]
+      [employeeTaskId],
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({
-        message:
-          "تعيين المهمة غير موجود",
+        message: "تعيين المهمة غير موجود",
       });
     }
 
     return res.json({
-      message:
-        "تم إزالة المهمة من الموظف بنجاح",
+      message: "تم إزالة المهمة من الموظف بنجاح",
 
-      assignment:
-        result.rows[0],
+      assignment: result.rows[0],
     });
-
   } catch (error) {
-
-    console.error(
-      "REMOVE TASK ERROR:",
-      error
-    );
+    console.error("REMOVE TASK ERROR:", error);
 
     return res.status(500).json({
-      message:
-        "حدث خطأ أثناء إزالة المهمة",
+      message: "حدث خطأ أثناء إزالة المهمة",
 
       error: error.message,
       code: error.code,
@@ -1521,68 +1289,43 @@ exports.removeTaskFromEmployee = async (
   }
 };
 
-
 // =========================================================
 // UPDATE TASK WITH STAGES
 // =========================================================
 
-exports.updateTask = async (
-  req,
-  res
-) => {
-
+exports.updateTask = async (req, res) => {
   const client = await pool.connect();
 
   try {
+    const taskId = Number(req.params.id);
 
-    const taskId =
-      Number(req.params.id);
-
-    const {
-      title,
-      description,
-      due_date,
-      stages,
-    } = req.body;
+    const { title, description, due_date, stages } = req.body;
 
     // =====================================================
     // VALIDATION
     // =====================================================
 
-    if (
-      !Number.isInteger(taskId) ||
-      taskId <= 0
-    ) {
+    if (!Number.isInteger(taskId) || taskId <= 0) {
       return res.status(400).json({
-        message:
-          "معرف المهمة غير صحيح",
+        message: "معرف المهمة غير صحيح",
       });
     }
 
-    if (
-      !title ||
-      !title.trim()
-    ) {
+    if (!title || !title.trim()) {
       return res.status(400).json({
-        message:
-          "عنوان المهمة مطلوب",
+        message: "عنوان المهمة مطلوب",
       });
     }
 
     if (!due_date) {
       return res.status(400).json({
-        message:
-          "تاريخ استحقاق المهمة مطلوب",
+        message: "تاريخ استحقاق المهمة مطلوب",
       });
     }
 
-    if (
-      !Array.isArray(stages) ||
-      stages.length === 0
-    ) {
+    if (!Array.isArray(stages) || stages.length === 0) {
       return res.status(400).json({
-        message:
-          "يجب إضافة مرحلة واحدة على الأقل",
+        message: "يجب إضافة مرحلة واحدة على الأقل",
       });
     }
 
@@ -1593,45 +1336,34 @@ exports.updateTask = async (
     const cleanedStages = [];
 
     for (let i = 0; i < stages.length; i++) {
-
       const stage = stages[i];
 
-      if (
-        !stage?.title ||
-        !stage.title.trim()
-      ) {
+      if (!stage?.title || !stage.title.trim()) {
         return res.status(400).json({
-          message:
-            `اسم المرحلة ${i + 1} مطلوب`,
+          message: `اسم المرحلة ${i + 1} مطلوب`,
         });
       }
 
       if (!stage?.due_date) {
         return res.status(400).json({
-          message:
-            `تاريخ المرحلة ${i + 1} مطلوب`,
+          message: `تاريخ المرحلة ${i + 1} مطلوب`,
         });
       }
 
       if (stage.due_date > due_date) {
         return res.status(400).json({
-          message:
-            `تاريخ المرحلة ${i + 1} لا يمكن أن يكون بعد تاريخ المهمة`,
+          message: `تاريخ المرحلة ${i + 1} لا يمكن أن يكون بعد تاريخ المهمة`,
         });
       }
 
       cleanedStages.push({
-        title:
-          stage.title.trim(),
+        title: stage.title.trim(),
 
-        description:
-          stage.description?.trim() || null,
+        description: stage.description?.trim() || null,
 
-        due_date:
-          stage.due_date,
+        due_date: stage.due_date,
 
-        stage_order:
-          i + 1,
+        stage_order: i + 1,
       });
     }
 
@@ -1645,9 +1377,8 @@ exports.updateTask = async (
     // UPDATE TASK
     // =====================================================
 
-    const taskResult =
-      await client.query(
-        `
+    const taskResult = await client.query(
+      `
         UPDATE tasks
         SET
           title = $1,
@@ -1656,21 +1387,14 @@ exports.updateTask = async (
         WHERE task_id = $4
         RETURNING *
         `,
-        [
-          title.trim(),
-          description?.trim() || null,
-          due_date,
-          taskId,
-        ]
-      );
+      [title.trim(), description?.trim() || null, due_date, taskId],
+    );
 
     if (taskResult.rows.length === 0) {
-
       await client.query("ROLLBACK");
 
       return res.status(404).json({
-        message:
-          "المهمة غير موجودة",
+        message: "المهمة غير موجودة",
       });
     }
 
@@ -1678,34 +1402,29 @@ exports.updateTask = async (
     // GET CURRENT STAGES
     // =====================================================
 
-    const oldStagesResult =
-      await client.query(
-        `
+    const oldStagesResult = await client.query(
+      `
         SELECT
           stage_id
         FROM task_stages
         WHERE task_id = $1
         `,
-        [taskId]
-      );
+      [taskId],
+    );
 
-    const oldStageIds =
-      oldStagesResult.rows.map(
-        (row) => Number(row.stage_id)
-      );
+    const oldStageIds = oldStagesResult.rows.map((row) => Number(row.stage_id));
 
     // =====================================================
     // DELETE OLD EMPLOYEE STAGE RECORDS
     // =====================================================
 
     if (oldStageIds.length > 0) {
-
       await client.query(
         `
         DELETE FROM employee_task_stages
         WHERE stage_id = ANY($1::int[])
         `,
-        [oldStageIds]
+        [oldStageIds],
       );
     }
 
@@ -1718,7 +1437,7 @@ exports.updateTask = async (
       DELETE FROM task_stages
       WHERE task_id = $1
       `,
-      [taskId]
+      [taskId],
     );
 
     // =====================================================
@@ -1727,14 +1446,9 @@ exports.updateTask = async (
 
     const createdStages = [];
 
-    for (
-      const stage
-      of cleanedStages
-    ) {
-
-      const stageResult =
-        await client.query(
-          `
+    for (const stage of cleanedStages) {
+      const stageResult = await client.query(
+        `
           INSERT INTO task_stages (
             task_id,
             title,
@@ -1745,18 +1459,16 @@ exports.updateTask = async (
           VALUES ($1, $2, $3, $4, $5)
           RETURNING *
           `,
-          [
-            taskId,
-            stage.title,
-            stage.description,
-            stage.due_date,
-            stage.stage_order,
-          ]
-        );
-
-      createdStages.push(
-        stageResult.rows[0]
+        [
+          taskId,
+          stage.title,
+          stage.description,
+          stage.due_date,
+          stage.stage_order,
+        ],
       );
+
+      createdStages.push(stageResult.rows[0]);
     }
 
     // =====================================================
@@ -1764,27 +1476,18 @@ exports.updateTask = async (
     // RE-CREATE EMPLOYEE STAGES
     // =====================================================
 
-    const assignmentsResult =
-      await client.query(
-        `
+    const assignmentsResult = await client.query(
+      `
         SELECT
           id
         FROM employee_tasks
         WHERE task_id = $1
         `,
-        [taskId]
-      );
+      [taskId],
+    );
 
-    for (
-      const assignment
-      of assignmentsResult.rows
-    ) {
-
-      for (
-        const stage
-        of createdStages
-      ) {
-
+    for (const assignment of assignmentsResult.rows) {
+      for (const stage of createdStages) {
         await client.query(
           `
           INSERT INTO employee_task_stages (
@@ -1795,10 +1498,7 @@ exports.updateTask = async (
           )
           VALUES ($1, $2, 0, NULL)
           `,
-          [
-            assignment.id,
-            stage.stage_id,
-          ]
+          [assignment.id, stage.stage_id],
         );
       }
 
@@ -1809,81 +1509,57 @@ exports.updateTask = async (
         SET status = 'pending'
         WHERE id = $1
         `,
-        [assignment.id]
+        [assignment.id],
       );
     }
 
     await client.query("COMMIT");
 
     return res.json({
-      message:
-        "تم تعديل المهمة بنجاح",
+      message: "تم تعديل المهمة بنجاح",
 
-      task:
-        taskResult.rows[0],
+      task: taskResult.rows[0],
 
-      stages:
-        createdStages,
+      stages: createdStages,
     });
-
   } catch (error) {
-
     try {
       await client.query("ROLLBACK");
     } catch (rollbackError) {
-      console.error(
-        "ROLLBACK ERROR:",
-        rollbackError
-      );
+      console.error("ROLLBACK ERROR:", rollbackError);
     }
 
-    console.error(
-      "UPDATE TASK ERROR:",
-      error
-    );
+    console.error("UPDATE TASK ERROR:", error);
 
     return res.status(500).json({
-      message:
-        "حدث خطأ أثناء تعديل المهمة",
+      message: "حدث خطأ أثناء تعديل المهمة",
 
       error: error.message,
       code: error.code,
       detail: error.detail,
     });
-
   } finally {
     client.release();
   }
 };
 
-
 // =========================================================
 // DELETE TASK
 // =========================================================
 
-exports.deleteTask = async (
-  req,
-  res
-) => {
-
+exports.deleteTask = async (req, res) => {
   const client = await pool.connect();
 
   try {
-
-    const taskId =
-      Number(req.params.id);
+    const taskId = Number(req.params.id);
 
     // =====================================================
     // VALIDATION
     // =====================================================
 
-    if (
-      !Number.isInteger(taskId) ||
-      taskId <= 0
-    ) {
+    if (!Number.isInteger(taskId) || taskId <= 0) {
       return res.status(400).json({
-        message:
-          "معرف المهمة غير صحيح",
+        message: "معرف المهمة غير صحيح",
       });
     }
 
@@ -1902,7 +1578,7 @@ exports.deleteTask = async (
         WHERE task_id = $1
       )
       `,
-      [taskId]
+      [taskId],
     );
 
     // =====================================================
@@ -1914,7 +1590,7 @@ exports.deleteTask = async (
       DELETE FROM employee_tasks
       WHERE task_id = $1
       `,
-      [taskId]
+      [taskId],
     );
 
     // =====================================================
@@ -1926,68 +1602,53 @@ exports.deleteTask = async (
       DELETE FROM task_stages
       WHERE task_id = $1
       `,
-      [taskId]
+      [taskId],
     );
 
     // =====================================================
     // DELETE TASK
     // =====================================================
 
-    const result =
-      await client.query(
-        `
+    const result = await client.query(
+      `
         DELETE FROM tasks
         WHERE task_id = $1
         RETURNING *
         `,
-        [taskId]
-      );
+      [taskId],
+    );
 
     if (result.rows.length === 0) {
-
       await client.query("ROLLBACK");
 
       return res.status(404).json({
-        message:
-          "المهمة غير موجودة",
+        message: "المهمة غير موجودة",
       });
     }
 
     await client.query("COMMIT");
 
     return res.json({
-      message:
-        "تم حذف المهمة بنجاح",
+      message: "تم حذف المهمة بنجاح",
 
-      task:
-        result.rows[0],
+      task: result.rows[0],
     });
-
   } catch (error) {
-
     try {
       await client.query("ROLLBACK");
     } catch (rollbackError) {
-      console.error(
-        "ROLLBACK ERROR:",
-        rollbackError
-      );
+      console.error("ROLLBACK ERROR:", rollbackError);
     }
 
-    console.error(
-      "DELETE TASK ERROR:",
-      error
-    );
+    console.error("DELETE TASK ERROR:", error);
 
     return res.status(500).json({
-      message:
-        "حدث خطأ أثناء حذف المهمة",
+      message: "حدث خطأ أثناء حذف المهمة",
 
       error: error.message,
       code: error.code,
       detail: error.detail,
     });
-
   } finally {
     client.release();
   }
