@@ -291,69 +291,91 @@ exports.getTasks = async (req, res) => {
       }
 
       const result = await pool.query(
-        `
-        SELECT
-          et.id AS employee_task_id,
-          et.employee_id,
-          et.task_id,
+  `
+  SELECT
+    et.id AS employee_task_id,
+    et.employee_id,
+    et.task_id,
 
-          t.title,
-          t.description,
-          t.due_date,
+    t.title,
+    t.description,
+    t.due_date,
 
-          et.status,
-          et.selected_at,
+    et.status,
+    et.selected_at,
 
-          COALESCE(
-            (
-              SELECT JSON_AGG(
-                JSONB_BUILD_OBJECT(
-                  'stage_id', ts.stage_id,
-                  'title', ts.title,
-                  'description', ts.description,
-                  'due_date', ts.due_date,
-                  'stage_order', ts.stage_order,
-                  'completed', ets.completed,
-                  'completed_at', ets.completed_at
-                )
-                ORDER BY ts.stage_order ASC
-              )
-              FROM employee_task_stages ets
-              INNER JOIN task_stages ts
-                ON ts.stage_id = ets.stage_id
-              WHERE ets.employee_task_id = et.id
-            ),
-            '[]'
-          ) AS stages,
+    COALESCE(
+      (
+        SELECT JSON_AGG(
+          JSONB_BUILD_OBJECT(
+            'stage_id', ts.stage_id,
+            'title', ts.title,
+            'description', ts.description,
+            'due_date', ts.due_date,
+            'stage_order', ts.stage_order,
+            'completed', ets.completed,
+            'completed_at', ets.completed_at
+          )
+          ORDER BY ts.stage_order ASC
+        )
+        FROM employee_task_stages ets
 
-          (
-            SELECT COUNT(*)
-            FROM employee_task_stages ets
-            WHERE ets.employee_task_id = et.id
-          )::INTEGER AS total_stages,
+        INNER JOIN task_stages ts
+          ON ts.stage_id = ets.stage_id
 
-          (
-            SELECT COUNT(*)
-            FROM employee_task_stages ets
-            WHERE ets.employee_task_id = et.id
-              AND ets.completed = 1
-          )::INTEGER AS completed_stages
+        WHERE ets.employee_task_id = et.id
+      ),
+      '[]'
+    ) AS stages,
 
-        FROM employee_tasks et
+    (
+      SELECT COUNT(*)
+      FROM employee_task_stages ets
+      WHERE ets.employee_task_id = et.id
+    )::INTEGER AS total_stages,
 
-        INNER JOIN tasks t
-          ON t.task_id = et.task_id
+    (
+      SELECT COUNT(*)
+      FROM employee_task_stages ets
+      WHERE ets.employee_task_id = et.id
+        AND ets.completed = 1
+    )::INTEGER AS completed_stages,
 
-        INNER JOIN employees e
-          ON e.employee_id = et.employee_id
+    CASE
+      WHEN (
+        SELECT COUNT(*)
+        FROM employee_task_stages ets
+        WHERE ets.employee_task_id = et.id
+      ) = (
+        SELECT COUNT(*)
+        FROM employee_task_stages ets
+        WHERE ets.employee_task_id = et.id
+        AND ets.completed = 1
+      )
+      AND (
+        SELECT COUNT(*)
+        FROM employee_task_stages ets
+        WHERE ets.employee_task_id = et.id
+      ) > 0
+      THEN true
+      ELSE false
+    END AS all_stages_completed
 
-        WHERE et.employee_id = $1
-          AND e.is_deleted = 0
+  FROM employee_tasks et
 
-        ORDER BY et.id DESC
-        `,
-        [employeeId],
-      );
+  INNER JOIN tasks t
+    ON t.task_id = et.task_id
+
+  INNER JOIN employees e
+    ON e.employee_id = et.employee_id
+
+  WHERE et.employee_id = $1
+    AND e.is_deleted = 0
+
+  ORDER BY et.id DESC
+  `,
+  [employeeId]
+);
 
       return res.json(result.rows);
     }
@@ -423,14 +445,18 @@ exports.getEmployees = async (req, res) => {
 // ASSIGN TASK TO MULTIPLE EMPLOYEES
 // =========================================================
 
+// =========================================================
+// ASSIGN TASK / STAGES TO EMPLOYEES
+// =========================================================
+
 exports.assignTask = async (req, res) => {
   const client = await pool.connect();
 
   try {
     console.log("=================================");
-    console.log("ASSIGN TASK START");
+    console.log("ASSIGN TASK / STAGES START");
     console.log("USER:", req.user);
-    console.log("BODY:", req.body);
+    console.log("BODY:", JSON.stringify(req.body, null, 2));
     console.log("=================================");
 
     // =====================================================
@@ -443,39 +469,18 @@ exports.assignTask = async (req, res) => {
       });
     }
 
-    const { employee_ids, employee_id, task_id } = req.body;
-
-    // =====================================================
-    // SUPPORT OLD + NEW FORMAT
-    // =====================================================
-
-    let employeeIds = [];
-
-    if (Array.isArray(employee_ids)) {
-      employeeIds = employee_ids;
-    } else if (employee_id) {
-      employeeIds = [employee_id];
-    }
-
-    employeeIds = [
-      ...new Set(
-        employeeIds
-          .map((id) => Number(id))
-          .filter((id) => Number.isInteger(id) && id > 0),
-      ),
-    ];
+    const {
+      task_id,
+      assignments,
+      employee_ids,
+      employee_id,
+    } = req.body;
 
     const taskId = Number(task_id);
 
     // =====================================================
-    // VALIDATION
+    // VALIDATE TASK
     // =====================================================
-
-    if (employeeIds.length === 0) {
-      return res.status(400).json({
-        message: "يرجى اختيار موظف واحد على الأقل",
-      });
-    }
 
     if (!Number.isInteger(taskId) || taskId <= 0) {
       return res.status(400).json({
@@ -497,7 +502,7 @@ exports.assignTask = async (req, res) => {
       FROM tasks
       WHERE task_id = $1
       `,
-      [taskId],
+      [taskId]
     );
 
     if (taskResult.rows.length === 0) {
@@ -507,7 +512,7 @@ exports.assignTask = async (req, res) => {
     }
 
     // =====================================================
-    // CHECK STAGES
+    // GET STAGES
     // =====================================================
 
     const stagesResult = await client.query(
@@ -523,7 +528,7 @@ exports.assignTask = async (req, res) => {
       WHERE task_id = $1
       ORDER BY stage_order ASC
       `,
-      [taskId],
+      [taskId]
     );
 
     if (stagesResult.rows.length === 0) {
@@ -532,9 +537,147 @@ exports.assignTask = async (req, res) => {
       });
     }
 
+    const allStages = stagesResult.rows;
+
     // =====================================================
-    // CHECK EMPLOYEES
+    // NORMALIZE ASSIGNMENTS
     // =====================================================
+    //
+    // الشكل الجديد:
+    //
+    // assignments: [
+    //   {
+    //     employee_id: 5,
+    //     assignment_type: "task",
+    //     stage_ids: []
+    //   },
+    //   {
+    //     employee_id: 8,
+    //     assignment_type: "stage",
+    //     stage_ids: [12]
+    //   }
+    // ]
+    //
+    // task = المهمة كاملة
+    // stage = مرحلة / مراحل محددة
+    //
+    // =====================================================
+
+    let normalizedAssignments = [];
+
+    if (Array.isArray(assignments) && assignments.length > 0) {
+      normalizedAssignments = assignments.map((item) => ({
+        employee_id: Number(item.employee_id),
+        assignment_type:
+          item.assignment_type === "stage" ? "stage" : "task",
+        stage_ids: Array.isArray(item.stage_ids)
+          ? [
+              ...new Set(
+                item.stage_ids
+                  .map((id) => Number(id))
+                  .filter(
+                    (id) => Number.isInteger(id) && id > 0
+                  )
+              ),
+            ]
+          : [],
+      }));
+    } else {
+      // ===================================================
+      // OLD FORMAT SUPPORT
+      // ===================================================
+
+      let employeeIds = [];
+
+      if (Array.isArray(employee_ids)) {
+        employeeIds = employee_ids;
+      } else if (employee_id) {
+        employeeIds = [employee_id];
+      }
+
+      employeeIds = [
+        ...new Set(
+          employeeIds
+            .map((id) => Number(id))
+            .filter(
+              (id) => Number.isInteger(id) && id > 0
+            )
+        ),
+      ];
+
+      normalizedAssignments = employeeIds.map((id) => ({
+        employee_id: id,
+        assignment_type: "task",
+        stage_ids: [],
+      }));
+    }
+
+    // =====================================================
+    // VALIDATE ASSIGNMENTS
+    // =====================================================
+
+    if (normalizedAssignments.length === 0) {
+      return res.status(400).json({
+        message: "يرجى اختيار موظف واحد على الأقل",
+      });
+    }
+
+    // =====================================================
+    // REMOVE DUPLICATE EMPLOYEES
+    // =====================================================
+
+    const uniqueEmployeesMap = new Map();
+
+    for (const assignment of normalizedAssignments) {
+      if (
+        !Number.isInteger(assignment.employee_id) ||
+        assignment.employee_id <= 0
+      ) {
+        return res.status(400).json({
+          message: "معرف أحد الموظفين غير صحيح",
+        });
+      }
+
+      if (assignment.assignment_type === "stage") {
+        if (assignment.stage_ids.length === 0) {
+          return res.status(400).json({
+            message: `يرجى اختيار مرحلة للموظف رقم ${assignment.employee_id}`,
+          });
+        }
+
+        // التحقق أن المراحل تتبع المهمة
+        const validStageIds = new Set(
+          allStages.map((stage) => Number(stage.stage_id))
+        );
+
+        const invalidStages = assignment.stage_ids.filter(
+          (stageId) => !validStageIds.has(stageId)
+        );
+
+        if (invalidStages.length > 0) {
+          return res.status(400).json({
+            message: "تم اختيار مرحلة لا تتبع هذه المهمة",
+          });
+        }
+      }
+
+      uniqueEmployeesMap.set(
+        assignment.employee_id,
+        assignment
+      );
+    }
+
+    normalizedAssignments = Array.from(
+      uniqueEmployeesMap.values()
+    );
+
+    // =====================================================
+    // GET EMPLOYEES
+    // =====================================================
+
+    const employeeIds = normalizedAssignments.map(
+      (item) => item.employee_id
+    );
 
     const employeesResult = await client.query(
       `
@@ -547,7 +690,7 @@ exports.assignTask = async (req, res) => {
         AND is_deleted = 0
       ORDER BY name ASC
       `,
-      [employeeIds],
+      [employeeIds]
     );
 
     if (employeesResult.rows.length !== employeeIds.length) {
@@ -571,44 +714,70 @@ exports.assignTask = async (req, res) => {
       DELETE FROM employee_tasks
       WHERE task_id = $1
       `,
-      [taskId],
+      [taskId]
     );
 
     // =====================================================
-    // CREATE ASSIGNMENTS + STAGES
+    // CREATE NEW ASSIGNMENTS
     // =====================================================
 
-    const assignments = [];
+    const createdAssignments = [];
 
-    for (const employeeId of employeeIds) {
+    for (const assignmentData of normalizedAssignments) {
+      const employeeId = assignmentData.employee_id;
+
+      // ---------------------------------------------------
+      // INSERT EMPLOYEE TASK
+      // ---------------------------------------------------
+
       const assignmentResult = await client.query(
         `
-          INSERT INTO employee_tasks (
-            employee_id,
-            task_id,
-            status
-          )
-          VALUES ($1, $2, 'pending')
-          RETURNING
-            id,
-            employee_id,
-            task_id,
-            status,
-            selected_at
-          `,
-        [employeeId, taskId],
+        INSERT INTO employee_tasks (
+          employee_id,
+          task_id,
+          status
+        )
+        VALUES ($1, $2, 'pending')
+        RETURNING
+          id,
+          employee_id,
+          task_id,
+          status,
+          selected_at
+        `,
+        [employeeId, taskId]
       );
 
-      const assignment = assignmentResult.rows[0];
+      const employeeTask = assignmentResult.rows[0];
 
-      assignments.push(assignment);
+      // ---------------------------------------------------
+      // DETERMINE STAGES
+      // ---------------------------------------------------
 
-      // ===================================================
-      // CREATE STAGE RECORDS FOR THIS EMPLOYEE
-      // ===================================================
+      let stagesToAssign = [];
 
-      for (const stage of stagesResult.rows) {
-        await client.query(
+      if (assignmentData.assignment_type === "task") {
+        // المهمة كاملة
+        stagesToAssign = allStages;
+      } else {
+        // مرحلة / مراحل محددة
+        const selectedStageIds = new Set(
+          assignmentData.stage_ids
+        );
+
+        stagesToAssign = allStages.filter((stage) =>
+          selectedStageIds.has(Number(stage.stage_id))
+        );
+      }
+
+      // ---------------------------------------------------
+      // CREATE EMPLOYEE STAGE RECORDS
+      // ---------------------------------------------------
+
+      const createdStageRecords = [];
+
+      for (const stage of stagesToAssign) {
+        const stageRecordResult = await client.query(
           `
           INSERT INTO employee_task_stages (
             employee_task_id,
@@ -617,30 +786,56 @@ exports.assignTask = async (req, res) => {
             completed_at
           )
           VALUES ($1, $2, 0, NULL)
+          RETURNING
+            id,
+            employee_task_id,
+            stage_id,
+            completed,
+            completed_at
           `,
-          [assignment.id, stage.stage_id],
+          [
+            employeeTask.id,
+            stage.stage_id,
+          ]
+        );
+
+        createdStageRecords.push(
+          stageRecordResult.rows[0]
         );
       }
+
+      createdAssignments.push({
+        ...employeeTask,
+        assignment_type: assignmentData.assignment_type,
+        stage_ids: stagesToAssign.map(
+          (stage) => stage.stage_id
+        ),
+        stages: stagesToAssign,
+        stage_records: createdStageRecords,
+      });
     }
 
     await client.query("COMMIT");
 
-    console.log("ASSIGNMENTS CREATED:", assignments);
+    console.log(
+      "ASSIGNMENTS CREATED:",
+      JSON.stringify(createdAssignments, null, 2)
+    );
 
     return res.status(201).json({
-      message: "تم تعيين المهمة للموظفين بنجاح",
-
+      message: "تم تعيين المهمة بنجاح",
       task: taskResult.rows[0],
-
       employees: employeesResult.rows,
-
-      assignments,
+      assignments: createdAssignments,
     });
   } catch (error) {
     try {
       await client.query("ROLLBACK");
     } catch (rollbackError) {
-      console.error("ROLLBACK ERROR:", rollbackError);
+      console.error(
+        "ROLLBACK ERROR:",
+        rollbackError
+      );
     }
 
     console.error("=================================");
@@ -656,20 +851,14 @@ exports.assignTask = async (req, res) => {
 
     return res.status(500).json({
       message: "حدث خطأ أثناء تعيين المهمة",
-
       error: error.message,
       code: error.code,
       detail: error.detail,
-      hint: error.hint,
-      constraint: error.constraint,
-      table: error.table,
-      column: error.column,
     });
   } finally {
     client.release();
   }
 };
-
 // =========================================================
 // GET EMPLOYEE TASKS
 // =========================================================
@@ -1651,5 +1840,145 @@ exports.deleteTask = async (req, res) => {
     });
   } finally {
     client.release();
+  }
+};
+
+
+// =========================================================
+// GET COMPLETED STAGES
+// =========================================================
+
+exports.getCompletedStages = async (req, res) => {
+  try {
+    console.log("GET COMPLETED STAGES");
+    console.log("USER:", req.user);
+
+    // =====================================================
+    // ADMIN
+    // =====================================================
+
+    if (req.user?.role === "admin") {
+      const result = await pool.query(
+        `
+        SELECT
+          ets.id AS employee_task_stage_id,
+
+          ets.employee_task_id,
+          ets.stage_id,
+
+          ets.completed,
+          ets.completed_at,
+
+          et.employee_id,
+          e.name AS employee_name,
+          e.email AS employee_email,
+
+          et.task_id,
+
+          t.title AS task_title,
+          t.description AS task_description,
+          t.due_date AS task_due_date,
+
+          ts.title AS stage_title,
+          ts.description AS stage_description,
+          ts.due_date AS stage_due_date,
+          ts.stage_order
+
+        FROM employee_task_stages ets
+
+        INNER JOIN employee_tasks et
+          ON et.id = ets.employee_task_id
+
+        INNER JOIN employees e
+          ON e.employee_id = et.employee_id
+
+        INNER JOIN tasks t
+          ON t.task_id = et.task_id
+
+        INNER JOIN task_stages ts
+          ON ts.stage_id = ets.stage_id
+
+        WHERE ets.completed = 1
+          AND e.is_deleted = 0
+
+        ORDER BY ets.completed_at DESC NULLS LAST
+        `
+      );
+
+      return res.json(result.rows);
+    }
+
+    // =====================================================
+    // EMPLOYEE
+    // =====================================================
+
+    if (req.user?.role === "employee") {
+      const employeeId = Number(
+        req.user?.employee_id || req.user?.id
+      );
+
+      if (!Number.isInteger(employeeId) || employeeId <= 0) {
+        return res.status(400).json({
+          message: "معرف الموظف غير موجود",
+        });
+      }
+
+      const result = await pool.query(
+        `
+        SELECT
+          ets.id AS employee_task_stage_id,
+
+          ets.employee_task_id,
+          ets.stage_id,
+
+          ets.completed,
+          ets.completed_at,
+
+          et.employee_id,
+          et.task_id,
+
+          t.title AS task_title,
+          t.description AS task_description,
+          t.due_date AS task_due_date,
+
+          ts.title AS stage_title,
+          ts.description AS stage_description,
+          ts.due_date AS stage_due_date,
+          ts.stage_order
+
+        FROM employee_task_stages ets
+
+        INNER JOIN employee_tasks et
+          ON et.id = ets.employee_task_id
+
+        INNER JOIN tasks t
+          ON t.task_id = et.task_id
+
+        INNER JOIN task_stages ts
+          ON ts.stage_id = ets.stage_id
+
+        WHERE et.employee_id = $1
+          AND ets.completed = 1
+
+        ORDER BY ets.completed_at DESC NULLS LAST
+        `,
+        [employeeId]
+      );
+
+      return res.json(result.rows);
+    }
+
+    return res.status(403).json({
+      message: "غير مصرح لك بالوصول إلى المراحل المكتملة",
+    });
+  } catch (error) {
+    console.error("GET COMPLETED STAGES ERROR:", error);
+
+    return res.status(500).json({
+      message: "فشل تحميل المراحل المكتملة",
+      error: error.message,
+      code: error.code,
+      detail: error.detail,
+    });
   }
 };
