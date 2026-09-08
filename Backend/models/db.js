@@ -183,6 +183,31 @@ const createTables = async () => {
         DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS task_stages (
+    stage_id SERIAL PRIMARY KEY,
+
+    task_id INTEGER NOT NULL
+        REFERENCES tasks(task_id)
+        ON DELETE CASCADE,
+
+    title VARCHAR(255) NOT NULL,
+
+    description TEXT,
+
+    due_date DATE,
+
+    completed SMALLINT NOT NULL DEFAULT 0,
+
+    stage_order INTEGER NOT NULL DEFAULT 1,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_stages_task_id
+ON task_stages(task_id);
+
+CREATE INDEX IF NOT EXISTS idx_task_stages_completed
+ON task_stages(completed);
   `;
 
   try {
