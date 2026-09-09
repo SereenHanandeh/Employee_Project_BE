@@ -387,32 +387,16 @@ exports.getMe = async (req, res) => {
       }
 
       const result = await pool.query(
-  `
-  SELECT
-    e.employee_id,
-    e.name,
-    e.email,
-    e.department_id,
-    COALESCE(
-      d.name,
-      e.department
-    ) AS department_name,
-    COALESCE(
-      d.name,
-      e.department
-    ) AS department,
-    e.position,
-    e.role,
-    e.welcome_seen
-  FROM employees e
-  LEFT JOIN departments d
-    ON d.department_id = e.department_id
-  WHERE e.employee_id = $1
-    AND e.is_deleted = 0
-  LIMIT 1
-  `,
-  [employeeId]
-);
+        `
+        SELECT
+          admin_id,
+          email
+        FROM admins
+        WHERE admin_id = $1
+        LIMIT 1
+        `,
+        [adminId]
+      );
 
       if (result.rows.length === 0) {
         return res.status(404).json({
@@ -431,6 +415,7 @@ exports.getMe = async (req, res) => {
         department_name: null,
         position: null,
         role: "admin",
+        welcome_seen: true,
       });
     }
 
@@ -444,8 +429,7 @@ exports.getMe = async (req, res) => {
 
       if (!employeeId) {
         return res.status(401).json({
-          message:
-            "تعذر تحديد رقم الموظف",
+          message: "تعذر تحديد رقم الموظف",
         });
       }
 
@@ -455,7 +439,6 @@ exports.getMe = async (req, res) => {
           e.employee_id,
           e.name,
           e.email,
-
           e.department_id,
 
           COALESCE(
@@ -469,9 +452,8 @@ exports.getMe = async (req, res) => {
           ) AS department,
 
           e.position,
-          e.role
-              e.welcome_seen
-
+          e.role,
+          e.welcome_seen
 
         FROM employees e
 
@@ -514,6 +496,9 @@ exports.getMe = async (req, res) => {
           null,
 
         role: "employee",
+
+        welcome_seen:
+          employee.welcome_seen === true,
       });
     }
 
@@ -522,18 +507,18 @@ exports.getMe = async (req, res) => {
     // =====================================================
 
     return res.status(403).json({
-      message:
-        "نوع المستخدم غير معروف",
+      message: "نوع المستخدم غير معروف",
     });
+
   } catch (err) {
-    console.error(
-      "GET ME ERROR:",
-      err
-    );
+    console.error("GET ME ERROR:", err);
 
     return res.status(500).json({
-      message:
-        "حدث خطأ في الخادم",
+      message: "حدث خطأ في الخادم",
+      error:
+        process.env.NODE_ENV === "development"
+          ? err.message
+          : undefined,
     });
   }
 };
