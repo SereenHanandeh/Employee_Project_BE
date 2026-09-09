@@ -23,21 +23,32 @@ exports.login = async (req, res) => {
 
     email = email.trim().toLowerCase();
 
-    // =============================
+    // =====================================================
     // SEARCH EMPLOYEE
-    // =============================
+    // =====================================================
 
     const empResult = await pool.query(
-      "SELECT * FROM employees WHERE email = $1",
+      `
+      SELECT *
+      FROM employees
+      WHERE email = $1
+        AND is_deleted = 0
+      LIMIT 1
+      `,
       [email]
     );
 
-    // =============================
+    // =====================================================
     // SEARCH ADMIN
-    // =============================
+    // =====================================================
 
     const adminResult = await pool.query(
-      "SELECT * FROM admins WHERE email = $1",
+      `
+      SELECT *
+      FROM admins
+      WHERE email = $1
+      LIMIT 1
+      `,
       [email]
     );
 
@@ -52,19 +63,19 @@ exports.login = async (req, res) => {
       role = "admin";
     }
 
-    // =============================
+    // =====================================================
     // USER NOT FOUND
-    // =============================
+    // =====================================================
 
     if (!user) {
       return res.status(400).json({
-        message: "Invalid email",
+        message: "Invalid credentials",
       });
     }
 
-    // =============================
+    // =====================================================
     // PASSWORD
-    // =============================
+    // =====================================================
 
     const isMatch = await bcrypt.compare(
       password,
@@ -73,26 +84,19 @@ exports.login = async (req, res) => {
 
     if (!isMatch) {
       return res.status(400).json({
-        message: "Invalid password",
+        message: "Invalid credentials",
       });
     }
 
-    // =============================
-    // JWT
-    // =============================
+    // =====================================================
+    // TOKEN
+    // =====================================================
 
     const token = jwt.sign(
       {
-        id:
-          user.admin_id ||
-          user.employee_id,
-
-        employee_id:
-          user.employee_id || null,
-
-        admin_id:
-          user.admin_id || null,
-
+        id: user.admin_id || user.employee_id,
+        employee_id: user.employee_id || null,
+        admin_id: user.admin_id || null,
         role,
       },
       process.env.JWT_SECRET,
@@ -101,17 +105,15 @@ exports.login = async (req, res) => {
       }
     );
 
-    // =============================
-    // RESPONSE
-    // =============================
+    // =====================================================
+    // RESPONSE USER
+    // =====================================================
 
     return res.json({
       token,
 
       user: {
-        id:
-          user.admin_id ||
-          user.employee_id,
+        id: user.admin_id || user.employee_id,
 
         employee_id:
           user.employee_id || null,
@@ -122,9 +124,14 @@ exports.login = async (req, res) => {
         email: user.email,
 
         role,
+
+        // للموظف فقط
+        welcome_seen:
+          role === "employee"
+            ? Boolean(user.welcome_seen)
+            : true,
       },
     });
-
   } catch (err) {
     console.error("LOGIN ERROR:", err);
 
@@ -133,6 +140,5 @@ exports.login = async (req, res) => {
     });
   }
 };
-
 //------------------------------------------------------------------------------------------
 

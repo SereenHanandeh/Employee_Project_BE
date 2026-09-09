@@ -454,6 +454,8 @@ exports.getMe = async (req, res) => {
 
           e.position,
           e.role
+              e.welcome_seen
+
 
         FROM employees e
 
@@ -1335,6 +1337,61 @@ exports.changeMyPassword = async (
     return res.status(500).json({
       message:
         "حدث خطأ أثناء تغيير كلمة المرور",
+    });
+  }
+};
+
+// =====================================================
+// MARK WELCOME AS SEEN
+// =====================================================
+
+exports.markWelcomeSeen = async (req, res) => {
+  try {
+    if (req.user?.role !== "employee") {
+      return res.status(403).json({
+        message: "غير مسموح",
+      });
+    }
+
+    const employeeId =
+      req.user.employee_id || req.user.id;
+
+    if (!employeeId) {
+      return res.status(401).json({
+        message: "تعذر تحديد رقم الموظف",
+      });
+    }
+
+    const result = await pool.query(
+      `
+      UPDATE employees
+      SET welcome_seen = TRUE
+      WHERE employee_id = $1
+        AND is_deleted = 0
+      RETURNING employee_id, welcome_seen
+      `,
+      [employeeId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "الموظف غير موجود",
+      });
+    }
+
+    return res.json({
+      success: true,
+      welcome_seen:
+        result.rows[0].welcome_seen,
+    });
+  } catch (err) {
+    console.error(
+      "MARK WELCOME SEEN ERROR:",
+      err
+    );
+
+    return res.status(500).json({
+      message: "حدث خطأ في الخادم",
     });
   }
 };

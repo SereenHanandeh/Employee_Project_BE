@@ -11,6 +11,7 @@ const {
   getDeletedEmployees,
   updateMyProfile,
   changeMyPassword,
+  markWelcomeSeen,
 } = require("../controllers/employee");
 
 const auth = require("../middleware/auth");
@@ -24,6 +25,16 @@ employeeRouter.get(
   "/me",
   auth,
   getMe
+);
+
+// =========================================================
+// MARK WELCOME AS SEEN
+// =========================================================
+
+employeeRouter.put(
+  "/me/welcome",
+  auth,
+  markWelcomeSeen
 );
 
 // =========================================================
