@@ -2,32 +2,33 @@ const evaluationRouter = require("express").Router();
 
 const {
   createEvaluation,
-  getEvaluations,
   getEvaluationById,
+  getEvaluations,
+  getDeletedEvaluations,
+  restoreEvaluation,
   updateNotes,
   getMyEvaluations,
-  updateEvaluation,
   deleteEvaluation,
+  updateEvaluation,
 } = require("../controllers/evaluation");
 
-const isAdmin = require("../middleware/isAdmin");
 const auth = require("../middleware/auth");
+const isAdmin = require("../middleware/isAdmin");
 
-// =====================================================
-// CREATE EVALUATION
-// Admin + Employee
-// =====================================================
+// =========================================================
+// CREATE
+// =========================================================
 
 evaluationRouter.post(
   "/",
   auth,
+  isAdmin,
   createEvaluation
 );
 
-// =====================================================
-// GET ALL EVALUATIONS
-// Admin فقط
-// =====================================================
+// =========================================================
+// GET ALL ACTIVE
+// =========================================================
 
 evaluationRouter.get(
   "/",
@@ -36,44 +37,53 @@ evaluationRouter.get(
   getEvaluations
 );
 
-// =====================================================
-// GET MY EVALUATIONS
-// Employee + Admin
-// =====================================================
+// =========================================================
+// GET TRASH
+// مهم: يجب أن يكون قبل /:id
+// =========================================================
 
 evaluationRouter.get(
-  "/my-evaluations",
+  "/trash",
+  auth,
+  isAdmin,
+  getDeletedEvaluations
+);
+
+// =========================================================
+// RESTORE
+// مهم: يجب أن يكون قبل /:id
+// =========================================================
+
+evaluationRouter.put(
+  "/:id/restore",
+  auth,
+  isAdmin,
+  restoreEvaluation
+);
+
+// =========================================================
+// MY EVALUATIONS
+// =========================================================
+
+evaluationRouter.get(
+  "/my",
   auth,
   getMyEvaluations
 );
 
-// =====================================================
-// GET EVALUATION BY ID
-// يجب أن يكون محميًا
-// =====================================================
-
-evaluationRouter.get(
-  "/:id",
-  auth,
-  getEvaluationById
-);
-
-// =====================================================
+// =========================================================
 // UPDATE NOTES
-// Admin فقط
-// =====================================================
+// =========================================================
 
 evaluationRouter.put(
   "/:id/notes",
   auth,
-  isAdmin,
   updateNotes
 );
 
-// =====================================================
+// =========================================================
 // UPDATE EVALUATION
-// Admin فقط
-// =====================================================
+// =========================================================
 
 evaluationRouter.put(
   "/:id",
@@ -82,16 +92,26 @@ evaluationRouter.put(
   updateEvaluation
 );
 
-// =====================================================
-// DELETE EVALUATION
-// Admin فقط
-// =====================================================
+// =========================================================
+// DELETE -> TRASH
+// =========================================================
 
 evaluationRouter.delete(
   "/:id",
   auth,
   isAdmin,
   deleteEvaluation
+);
+
+// =========================================================
+// GET BY ID
+// يجب أن يكون في النهاية
+// =========================================================
+
+evaluationRouter.get(
+  "/:id",
+  auth,
+  getEvaluationById
 );
 
 module.exports = evaluationRouter;

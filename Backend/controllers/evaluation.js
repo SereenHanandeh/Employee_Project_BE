@@ -1,8 +1,9 @@
 const { pool } = require("../models/db");
 
-/* ============================= */
-/*      CREATE EVALUATION        */
-/* ============================= */
+// =========================================================
+// CREATE EVALUATION
+// =========================================================
+
 exports.createEvaluation = async (req, res) => {
   try {
     let {
@@ -23,6 +24,7 @@ exports.createEvaluation = async (req, res) => {
     // =========================
     // حساب المجموع لكل قسم
     // =========================
+
     const totalPerformance = Object.values(performance).reduce(
       (a, b) => a + Number(b || 0),
       0
@@ -41,28 +43,55 @@ exports.createEvaluation = async (req, res) => {
     // =========================
     // المجموع النهائي
     // =========================
-    const total = totalPerformance + totalPersonality + totalRelations;
+
+    const total =
+      totalPerformance +
+      totalPersonality +
+      totalRelations;
+
     const maxTotal = 104;
+
     const percentage = (total / maxTotal) * 100;
 
     // =========================
     // التقدير
     // =========================
+
     let grade = "ضعيف";
-    if (percentage >= 90) grade = "ممتاز";
-    else if (percentage >= 75) grade = "جيد جدا";
-    else if (percentage >= 60) grade = "جيد";
+
+    if (percentage >= 90) {
+      grade = "ممتاز";
+    } else if (percentage >= 75) {
+      grade = "جيد جدا";
+    } else if (percentage >= 60) {
+      grade = "جيد";
+    }
 
     // =========================
-    // INSERT DB مع RETURNING *
+    // INSERT
     // =========================
+
     const result = await pool.query(
       `
       INSERT INTO evaluations
-        (employee_id, performance, personality, relations,
-         performance_details, personality_details, relations_details,
-         total, percentage, grade, notes, from_date, to_date)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+        (
+          employee_id,
+          performance,
+          personality,
+          relations,
+          performance_details,
+          personality_details,
+          relations_details,
+          total,
+          percentage,
+          grade,
+          notes,
+          from_date,
+          to_date,
+          deleted_at
+        )
+      VALUES
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NULL)
       RETURNING *
       `,
       [
@@ -77,21 +106,26 @@ exports.createEvaluation = async (req, res) => {
         percentage,
         grade,
         notes,
-        from_date, // الآن تمرر القيمتين
+        from_date,
         to_date,
       ]
     );
 
-    // إعادة الصف المضاف مباشرة
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Evaluation Error" });
+    console.error("CREATE EVALUATION ERROR:", err);
+
+    res.status(500).json({
+      message: "Evaluation Error",
+      error: err.message,
+    });
   }
 };
-/* ============================= */
-/*   GET EVALUATION BY ID        */
-/* ============================= */
+
+// =========================================================
+// GET EVALUATION BY ID
+// =========================================================
+
 exports.getEvaluationById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -108,6 +142,7 @@ exports.getEvaluationById = async (req, res) => {
         JOIN employees emp
           ON e.employee_id = emp.employee_id
         WHERE e.evaluation_id = $1
+          AND e.deleted_at IS NULL
         `,
         [id]
       );
@@ -122,6 +157,7 @@ exports.getEvaluationById = async (req, res) => {
           ON e.employee_id = emp.employee_id
         WHERE e.evaluation_id = $1
           AND e.employee_id = $2
+          AND e.deleted_at IS NULL
         `,
         [id, req.user.id]
       );
@@ -134,7 +170,6 @@ exports.getEvaluationById = async (req, res) => {
     }
 
     return res.json(result.rows[0]);
-
   } catch (err) {
     console.error("Get Evaluation By ID Error:", err);
 
@@ -144,25 +179,103 @@ exports.getEvaluationById = async (req, res) => {
   }
 };
 
-/* ============================= */
-/*      GET EVALUATIONS          */
-/* ============================= */
+// =========================================================
+// GET ACTIVE EVALUATIONS
+// =========================================================
+
 exports.getEvaluations = async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT e.*, emp.name
+      SELECT
+        e.*,
+        emp.name
       FROM evaluations e
       JOIN employees emp
-      ON e.employee_id = emp.employee_id
+        ON e.employee_id = emp.employee_id
+      WHERE e.deleted_at IS NULL
       ORDER BY e.evaluation_id DESC
     `);
 
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Fetch Evaluations Error" });
+    console.error("GET EVALUATIONS ERROR:", err);
+
+    res.status(500).json({
+      message: "Fetch Evaluations Error",
+    });
   }
 };
+
+// =========================================================
+// GET DELETED EVALUATIONS - TRASH
+// =========================================================
+
+exports.getDeletedEvaluations = async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        e.*,
+        emp.name
+      FROM evaluations e
+      LEFT JOIN employees emp
+        ON e.employee_id = emp.employee_id
+      WHERE e.deleted_at IS NOT NULL
+      ORDER BY e.deleted_at DESC
+    `);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("GET DELETED EVALUATIONS ERROR:", err);
+
+    res.status(500).json({
+      message: "Fetch Deleted Evaluations Error",
+      error: err.message,
+    });
+  }
+};
+
+// =========================================================
+// RESTORE EVALUATION
+// =========================================================
+
+exports.restoreEvaluation = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `
+      UPDATE evaluations
+      SET deleted_at = NULL
+      WHERE evaluation_id = $1
+        AND deleted_at IS NOT NULL
+      RETURNING *
+      `,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "Evaluation not found in trash",
+      });
+    }
+
+    res.json({
+      message: "Evaluation restored successfully",
+      evaluation: result.rows[0],
+    });
+  } catch (err) {
+    console.error("RESTORE EVALUATION ERROR:", err);
+
+    res.status(500).json({
+      message: "Restore Evaluation Error",
+      error: err.message,
+    });
+  }
+};
+
+// =========================================================
+// UPDATE NOTES
+// =========================================================
 
 exports.updateNotes = async (req, res) => {
   try {
@@ -170,68 +283,115 @@ exports.updateNotes = async (req, res) => {
     const { notes } = req.body;
 
     const result = await pool.query(
-      `UPDATE evaluations SET notes=$1 WHERE evaluation_id=$2 RETURNING *`,
-      [notes, id],
+      `
+      UPDATE evaluations
+      SET notes = $1
+      WHERE evaluation_id = $2
+        AND deleted_at IS NULL
+      RETURNING *
+      `,
+      [notes, id]
     );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "Evaluation not found",
+      });
+    }
 
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Update Notes Error" });
+    console.error("UPDATE NOTES ERROR:", err);
+
+    res.status(500).json({
+      message: "Update Notes Error",
+    });
   }
 };
+
+// =========================================================
+// GET MY EVALUATIONS
+// =========================================================
 
 exports.getMyEvaluations = async (req, res) => {
   try {
     const userId = req.user.id;
 
     const result = await pool.query(
-      `SELECT evaluation_id, performance, personality, relations, total, grade
-FROM evaluations
-WHERE employee_id=$1
-ORDER BY evaluation_id DESC;`,
-      [userId],
+      `
+      SELECT
+        evaluation_id,
+        performance,
+        personality,
+        relations,
+        total,
+        percentage,
+        grade,
+        notes,
+        from_date,
+        to_date
+      FROM evaluations
+      WHERE employee_id = $1
+        AND deleted_at IS NULL
+      ORDER BY evaluation_id DESC
+      `,
+      [userId]
     );
 
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Fetch Evaluations Error" });
+    console.error("GET MY EVALUATIONS ERROR:", err);
+
+    res.status(500).json({
+      message: "Fetch Evaluations Error",
+    });
   }
 };
 
-/* ============================= */
-/*      DELETE EVALUATION       */
-/* ============================= */
+// =========================================================
+// DELETE EVALUATION
+// =========================================================
+// Soft Delete
+// لا نحذف من قاعدة البيانات نهائياً
+
 exports.deleteEvaluation = async (req, res) => {
   try {
     const { id } = req.params;
 
     const result = await pool.query(
-      `DELETE FROM evaluations 
-       WHERE evaluation_id = $1 
-       RETURNING *`,
-      [id],
+      `
+      UPDATE evaluations
+      SET deleted_at = NOW()
+      WHERE evaluation_id = $1
+        AND deleted_at IS NULL
+      RETURNING *
+      `,
+      [id]
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Evaluation not found" });
+      return res.status(404).json({
+        message: "Evaluation not found",
+      });
     }
 
     res.json({
-      message: "Evaluation deleted successfully",
+      message: "Evaluation moved to trash successfully",
       deleted: result.rows[0],
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Delete Evaluation Error" });
+    console.error("DELETE EVALUATION ERROR:", err);
+
+    res.status(500).json({
+      message: "Delete Evaluation Error",
+      error: err.message,
+    });
   }
 };
 
-/* ============================= */
-/*      UPDATE EVALUATION        */
-/* ============================= */
-
+// =========================================================
+// UPDATE EVALUATION
+// =========================================================
 
 exports.updateEvaluation = async (req, res) => {
   try {
@@ -260,7 +420,6 @@ exports.updateEvaluation = async (req, res) => {
         message: "employee_id مطلوب",
       });
     }
-    
 
     // =========================
     // حساب المجموع
@@ -286,7 +445,13 @@ exports.updateEvaluation = async (req, res) => {
       totalPersonality +
       totalRelations;
 
-    const maxTotal = 100;
+    // =========================
+    // ملاحظة:
+    // استخدمنا 104 مثل createEvaluation
+    // حتى يكون الحساب موحداً
+    // =========================
+
+    const maxTotal = 104;
 
     const percentage =
       (total / maxTotal) * 100;
@@ -317,20 +482,17 @@ exports.updateEvaluation = async (req, res) => {
         performance = $2,
         personality = $3,
         relations = $4,
-
         performance_details = $5,
         personality_details = $6,
         relations_details = $7,
-
         total = $8,
         percentage = $9,
         grade = $10,
         notes = $11,
         from_date = $12,
         to_date = $13
-
       WHERE evaluation_id = $14
-
+        AND deleted_at IS NULL
       RETURNING *
       `,
       [
@@ -338,18 +500,15 @@ exports.updateEvaluation = async (req, res) => {
         totalPerformance,
         totalPersonality,
         totalRelations,
-
         performance,
         personality,
         relations,
-
         total,
         percentage,
         grade,
         notes,
         from_date,
         to_date,
-
         id,
       ]
     );
