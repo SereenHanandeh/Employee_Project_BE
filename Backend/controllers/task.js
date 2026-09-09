@@ -265,6 +265,11 @@ exports.getTasks = async (req, res) => {
           ON e.employee_id = et.employee_id
           AND e.is_deleted = 0
 
+        -- =====================================================
+        -- استبعاد المهام الموجودة في سلة المهملات
+        -- =====================================================
+        WHERE t.deleted_at IS NULL
+
         GROUP BY
           t.task_id,
           t.title,
@@ -291,91 +296,98 @@ exports.getTasks = async (req, res) => {
       }
 
       const result = await pool.query(
-  `
-  SELECT
-    et.id AS employee_task_id,
-    et.employee_id,
-    et.task_id,
+        `
+        SELECT
+          et.id AS employee_task_id,
+          et.employee_id,
+          et.task_id,
 
-    t.title,
-    t.description,
-    t.due_date,
+          t.title,
+          t.description,
+          t.due_date,
 
-    et.status,
-    et.selected_at,
+          et.status,
+          et.selected_at,
 
-    COALESCE(
-      (
-        SELECT JSON_AGG(
-          JSONB_BUILD_OBJECT(
-            'stage_id', ts.stage_id,
-            'title', ts.title,
-            'description', ts.description,
-            'due_date', ts.due_date,
-            'stage_order', ts.stage_order,
-            'completed', ets.completed,
-            'completed_at', ets.completed_at
-          )
-          ORDER BY ts.stage_order ASC
-        )
-        FROM employee_task_stages ets
+          COALESCE(
+            (
+              SELECT JSON_AGG(
+                JSONB_BUILD_OBJECT(
+                  'stage_id', ts.stage_id,
+                  'title', ts.title,
+                  'description', ts.description,
+                  'due_date', ts.due_date,
+                  'stage_order', ts.stage_order,
+                  'completed', ets.completed,
+                  'completed_at', ets.completed_at
+                )
+                ORDER BY ts.stage_order ASC
+              )
+              FROM employee_task_stages ets
 
-        INNER JOIN task_stages ts
-          ON ts.stage_id = ets.stage_id
+              INNER JOIN task_stages ts
+                ON ts.stage_id = ets.stage_id
 
-        WHERE ets.employee_task_id = et.id
-      ),
-      '[]'
-    ) AS stages,
+              WHERE ets.employee_task_id = et.id
+            ),
+            '[]'
+          ) AS stages,
 
-    (
-      SELECT COUNT(*)
-      FROM employee_task_stages ets
-      WHERE ets.employee_task_id = et.id
-    )::INTEGER AS total_stages,
+          (
+            SELECT COUNT(*)
+            FROM employee_task_stages ets
+            WHERE ets.employee_task_id = et.id
+          )::INTEGER AS total_stages,
 
-    (
-      SELECT COUNT(*)
-      FROM employee_task_stages ets
-      WHERE ets.employee_task_id = et.id
-        AND ets.completed = 1
-    )::INTEGER AS completed_stages,
+          (
+            SELECT COUNT(*)
+            FROM employee_task_stages ets
+            WHERE ets.employee_task_id = et.id
+              AND ets.completed = 1
+          )::INTEGER AS completed_stages,
 
-    CASE
-      WHEN (
-        SELECT COUNT(*)
-        FROM employee_task_stages ets
-        WHERE ets.employee_task_id = et.id
-      ) = (
-        SELECT COUNT(*)
-        FROM employee_task_stages ets
-        WHERE ets.employee_task_id = et.id
-        AND ets.completed = 1
-      )
-      AND (
-        SELECT COUNT(*)
-        FROM employee_task_stages ets
-        WHERE ets.employee_task_id = et.id
-      ) > 0
-      THEN true
-      ELSE false
-    END AS all_stages_completed
+          CASE
+            WHEN (
+              SELECT COUNT(*)
+              FROM employee_task_stages ets
+              WHERE ets.employee_task_id = et.id
+            ) = (
+              SELECT COUNT(*)
+              FROM employee_task_stages ets
+              WHERE ets.employee_task_id = et.id
+                AND ets.completed = 1
+            )
 
-  FROM employee_tasks et
+            AND (
+              SELECT COUNT(*)
+              FROM employee_task_stages ets
+              WHERE ets.employee_task_id = et.id
+            ) > 0
 
-  INNER JOIN tasks t
-    ON t.task_id = et.task_id
+            THEN true
+            ELSE false
+          END AS all_stages_completed
 
-  INNER JOIN employees e
-    ON e.employee_id = et.employee_id
+        FROM employee_tasks et
 
-  WHERE et.employee_id = $1
-    AND e.is_deleted = 0
+        INNER JOIN tasks t
+          ON t.task_id = et.task_id
 
-  ORDER BY et.id DESC
-  `,
-  [employeeId]
-);
+        INNER JOIN employees e
+          ON e.employee_id = et.employee_id
+
+        WHERE et.employee_id = $1
+          AND e.is_deleted = 0
+
+          -- =====================================================
+          -- استبعاد المهام الموجودة في سلة المهملات
+          -- =====================================================
+          AND t.deleted_at IS NULL
+
+        ORDER BY et.id DESC
+        `,
+        [employeeId]
+      );
 
       return res.json(result.rows);
     }
@@ -387,6 +399,7 @@ exports.getTasks = async (req, res) => {
     return res.status(403).json({
       message: "غير مصرح لك بالوصول إلى المهام",
     });
+
   } catch (error) {
     console.error("=================================");
     console.error("GET TASKS ERROR");
@@ -542,27 +555,7 @@ exports.assignTask = async (req, res) => {
     // =====================================================
     // NORMALIZE ASSIGNMENTS
     // =====================================================
-    //
-    // الشكل الجديد:
-    //
-    // assignments: [
-    //   {
-    //     employee_id: 5,
-    //     assignment_type: "task",
-    //     stage_ids: []
-    //   },
-    //   {
-    //     employee_id: 8,
-    //     assignment_type: "stage",
-    //     stage_ids: [12]
-    //   }
-    // ]
-    //
-    // task = المهمة كاملة
-    // stage = مرحلة / مراحل محددة
-    //
-    // =====================================================
-
+    
     let normalizedAssignments = [];
 
     if (Array.isArray(assignments) && assignments.length > 0) {
@@ -583,11 +576,7 @@ exports.assignTask = async (req, res) => {
           : [],
       }));
     } else {
-      // ===================================================
-      // OLD FORMAT SUPPORT
-      // ===================================================
-
-      let employeeIds = [];
+          let employeeIds = [];
 
       if (Array.isArray(employee_ids)) {
         employeeIds = employee_ids;
@@ -980,6 +969,70 @@ exports.getEmployeeTasks = async (req, res) => {
 };
 
 // =========================================================
+// GET DELETED TASKS - TRASH
+// =========================================================
+exports.getDeletedTasks = async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        t.*,
+
+        COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'employee_id', e.employee_id,
+                'name', e.name,
+                'full_name', e.full_name,
+                'username', e.username
+              )
+              ORDER BY e.name
+            )
+            FROM employee_tasks et
+            JOIN employees e
+              ON e.employee_id = et.employee_id
+            WHERE et.task_id = t.task_id
+          ),
+          '[]'::json
+        ) AS employees,
+
+        COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'stage_id', ts.stage_id,
+                'title', ts.title,
+                'description', ts.description,
+                'due_date', ts.due_date,
+                'stage_order', ts.stage_order
+              )
+              ORDER BY ts.stage_order
+            )
+            FROM task_stages ts
+            WHERE ts.task_id = t.task_id
+          ),
+          '[]'::json
+        ) AS stages
+
+      FROM tasks t
+
+      WHERE t.deleted_at IS NOT NULL
+
+      ORDER BY t.deleted_at DESC
+    `);
+
+    return res.json(result.rows);
+  } catch (error) {
+    console.error("❌ getDeletedTasks error:", error);
+
+    return res.status(500).json({
+      message: "حدث خطأ أثناء جلب المهام المحذوفة",
+      error: error.message,
+    });
+  }
+};
+
+// =========================================================
 // COMPLETE STAGE
 // =========================================================
 
@@ -1272,8 +1325,6 @@ exports.reopenStage = async (req, res) => {
 
 // =========================================================
 // OLD COMPLETE TASK
-// =========================================================
-// أبقيناه للتوافق، لكن الأفضل استخدام completeStage.
 // =========================================================
 
 exports.completeTask = async (req, res) => {
@@ -1733,113 +1784,40 @@ exports.updateTask = async (req, res) => {
 };
 
 // =========================================================
-// DELETE TASK
+// SOFT DELETE TASK
 // =========================================================
-
 exports.deleteTask = async (req, res) => {
-  const client = await pool.connect();
+  const { id } = req.params;
 
   try {
-    const taskId = Number(req.params.id);
-
-    // =====================================================
-    // VALIDATION
-    // =====================================================
-
-    if (!Number.isInteger(taskId) || taskId <= 0) {
-      return res.status(400).json({
-        message: "معرف المهمة غير صحيح",
-      });
-    }
-
-    await client.query("BEGIN");
-
-    // =====================================================
-    // DELETE EMPLOYEE STAGE RECORDS
-    // =====================================================
-
-    await client.query(
+    const result = await pool.query(
       `
-      DELETE FROM employee_task_stages
-      WHERE employee_task_id IN (
-        SELECT id
-        FROM employee_tasks
-        WHERE task_id = $1
-      )
-      `,
-      [taskId],
-    );
-
-    // =====================================================
-    // DELETE ASSIGNMENTS
-    // =====================================================
-
-    await client.query(
-      `
-      DELETE FROM employee_tasks
+      UPDATE tasks
+      SET deleted_at = CURRENT_TIMESTAMP
       WHERE task_id = $1
+        AND deleted_at IS NULL
+      RETURNING *
       `,
-      [taskId],
-    );
-
-    // =====================================================
-    // DELETE STAGES
-    // =====================================================
-
-    await client.query(
-      `
-      DELETE FROM task_stages
-      WHERE task_id = $1
-      `,
-      [taskId],
-    );
-
-    // =====================================================
-    // DELETE TASK
-    // =====================================================
-
-    const result = await client.query(
-      `
-        DELETE FROM tasks
-        WHERE task_id = $1
-        RETURNING *
-        `,
-      [taskId],
+      [id],
     );
 
     if (result.rows.length === 0) {
-      await client.query("ROLLBACK");
-
       return res.status(404).json({
-        message: "المهمة غير موجودة",
+        message: "المهمة غير موجودة أو تم حذفها مسبقًا",
       });
     }
 
-    await client.query("COMMIT");
-
     return res.json({
-      message: "تم حذف المهمة بنجاح",
-
+      message: "تم نقل المهمة إلى سلة المهملات",
       task: result.rows[0],
     });
   } catch (error) {
-    try {
-      await client.query("ROLLBACK");
-    } catch (rollbackError) {
-      console.error("ROLLBACK ERROR:", rollbackError);
-    }
-
-    console.error("DELETE TASK ERROR:", error);
+    console.error("❌ deleteTask error:", error);
 
     return res.status(500).json({
       message: "حدث خطأ أثناء حذف المهمة",
-
       error: error.message,
-      code: error.code,
-      detail: error.detail,
     });
-  } finally {
-    client.release();
   }
 };
 
@@ -1982,3 +1960,43 @@ exports.getCompletedStages = async (req, res) => {
     });
   }
 };
+
+// =========================================================
+// RESTORE TASK
+// =========================================================
+exports.restoreTask = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `
+      UPDATE tasks
+      SET deleted_at = NULL
+      WHERE task_id = $1
+        AND deleted_at IS NOT NULL
+      RETURNING *
+      `,
+      [id],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "المهمة غير موجودة في سلة المهملات",
+      });
+    }
+
+    return res.json({
+      message: "تم استرجاع المهمة بنجاح",
+      task: result.rows[0],
+    });
+  } catch (error) {
+    console.error("❌ restoreTask error:", error);
+
+    return res.status(500).json({
+      message: "حدث خطأ أثناء استرجاع المهمة",
+      error: error.message,
+    });
+  }
+};
+
+

@@ -3,6 +3,8 @@ const taskRouter = require("express").Router();
 const {
   createTask,
   getTasks,
+  getDeletedTasks,
+  restoreTask,
   assignTask,
   updateTask,
   deleteTask,
@@ -24,20 +26,39 @@ const auth = require("../middleware/auth");
 const role = require("../middleware/role");
 
 // =====================================================
-// GET ALL TASKS
-// Admin    => جميع المهام
+// GET ALL ACTIVE TASKS
+// Admin    => جميع المهام غير المحذوفة
 // Employee => المهام المعينة له فقط
 // =====================================================
 
+taskRouter.get("/", auth, getTasks);
+
+// =====================================================
+// GET DELETED TASKS - TRASH
+// Admin فقط
+// =====================================================
+
 taskRouter.get(
-  "/",
+  "/trash",
   auth,
-  getTasks
+  role("admin"),
+  getDeletedTasks
+);
+
+// =====================================================
+// RESTORE DELETED TASK
+// Admin فقط
+// =====================================================
+
+taskRouter.put(
+  "/:id/restore",
+  auth,
+  role("admin"),
+  restoreTask
 );
 
 // =====================================================
 // GET COMPLETED STAGES
-//
 // Admin    => جميع المراحل المكتملة
 // Employee => المراحل المكتملة الخاصة به
 // =====================================================
@@ -86,6 +107,11 @@ taskRouter.put(
 
 // =====================================================
 // DELETE TASK
+//
+// Soft Delete
+// المهمة تنتقل إلى سلة المهملات
+// ولا يتم حذف المراحل أو التعيينات
+//
 // Admin فقط
 // =====================================================
 
@@ -188,4 +214,4 @@ taskRouter.put(
   reopenTask
 );
 
-module.exports = taskRouter;
+module.exports = taskRouter;شش
