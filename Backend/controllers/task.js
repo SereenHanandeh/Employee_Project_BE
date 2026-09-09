@@ -971,31 +971,49 @@ exports.getEmployeeTasks = async (req, res) => {
 // =========================================================
 // GET DELETED TASKS - TRASH
 // =========================================================
+// =========================================================
+// GET DELETED TASKS - TRASH
+// =========================================================
+
 exports.getDeletedTasks = async (req, res) => {
   try {
+    console.log("=================================");
+    console.log("GET DELETED TASKS");
+    console.log("USER:", req.user);
+    console.log("=================================");
+
     const result = await pool.query(`
       SELECT
-        t.*,
+        t.task_id,
+        t.title,
+        t.description,
+        t.due_date,
+        t.deleted_at,
 
+        -- ===================================================
+        -- EMPLOYEES ASSIGNED TO TASK
+        -- ===================================================
         COALESCE(
           (
             SELECT json_agg(
               json_build_object(
                 'employee_id', e.employee_id,
                 'name', e.name,
-                'full_name', e.full_name,
-                'username', e.username
+                'email', e.email
               )
-              ORDER BY e.name
+              ORDER BY e.name ASC
             )
             FROM employee_tasks et
-            JOIN employees e
+            INNER JOIN employees e
               ON e.employee_id = et.employee_id
             WHERE et.task_id = t.task_id
           ),
           '[]'::json
         ) AS employees,
 
+        -- ===================================================
+        -- TASK STAGES
+        -- ===================================================
         COALESCE(
           (
             SELECT json_agg(
@@ -1006,7 +1024,7 @@ exports.getDeletedTasks = async (req, res) => {
                 'due_date', ts.due_date,
                 'stage_order', ts.stage_order
               )
-              ORDER BY ts.stage_order
+              ORDER BY ts.stage_order ASC
             )
             FROM task_stages ts
             WHERE ts.task_id = t.task_id
@@ -1016,18 +1034,38 @@ exports.getDeletedTasks = async (req, res) => {
 
       FROM tasks t
 
+      -- =====================================================
+      -- ONLY DELETED TASKS
+      -- =====================================================
       WHERE t.deleted_at IS NOT NULL
 
       ORDER BY t.deleted_at DESC
     `);
 
+    console.log(
+      "DELETED TASKS COUNT:",
+      result.rows.length
+    );
+
     return res.json(result.rows);
+
   } catch (error) {
-    console.error("❌ getDeletedTasks error:", error);
+    console.error("=================================");
+    console.error("GET DELETED TASKS ERROR");
+    console.error("message:", error.message);
+    console.error("code:", error.code);
+    console.error("detail:", error.detail);
+    console.error("hint:", error.hint);
+    console.error("table:", error.table);
+    console.error("column:", error.column);
+    console.error("constraint:", error.constraint);
+    console.error("=================================");
 
     return res.status(500).json({
       message: "حدث خطأ أثناء جلب المهام المحذوفة",
       error: error.message,
+      code: error.code,
+      detail: error.detail,
     });
   }
 };
