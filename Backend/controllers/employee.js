@@ -387,16 +387,32 @@ exports.getMe = async (req, res) => {
       }
 
       const result = await pool.query(
-        `
-        SELECT
-          admin_id,
-          email
-        FROM admins
-        WHERE admin_id = $1
-        LIMIT 1
-        `,
-        [adminId]
-      );
+  `
+  SELECT
+    e.employee_id,
+    e.name,
+    e.email,
+    e.department_id,
+    COALESCE(
+      d.name,
+      e.department
+    ) AS department_name,
+    COALESCE(
+      d.name,
+      e.department
+    ) AS department,
+    e.position,
+    e.role,
+    e.welcome_seen
+  FROM employees e
+  LEFT JOIN departments d
+    ON d.department_id = e.department_id
+  WHERE e.employee_id = $1
+    AND e.is_deleted = 0
+  LIMIT 1
+  `,
+  [employeeId]
+);
 
       if (result.rows.length === 0) {
         return res.status(404).json({
