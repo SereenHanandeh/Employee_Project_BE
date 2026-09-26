@@ -1748,6 +1748,29 @@ const excelBufferToRows = (buffer) => {
 };
 
 // =========================================================
+// HELPER - إيجاد رقم عمود حسب أسماء محتملة للرأس
+// =========================================================
+
+const findColumnIndex = (headerRow, possibleNames) => {
+  const normalize = (s) =>
+    String(s || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+
+  const normalizedHeaders = headerRow.map((h) => normalize(h));
+  const normalizedTargets = possibleNames.map((n) => normalize(n));
+
+  for (let i = 0; i < normalizedHeaders.length; i++) {
+    if (normalizedTargets.includes(normalizedHeaders[i])) {
+      return i;
+    }
+  }
+
+  return -1;
+};
+
+// =========================================================
 // PREVIEW EMPLOYEES EXCEL IMPORT
 // =========================================================
 
