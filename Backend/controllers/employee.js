@@ -1747,15 +1747,17 @@ const excelBufferToRows = (buffer) => {
   });
 };
 
-// =========================================================
-// HELPER - إيجاد رقم عمود حسب أسماء محتملة للرأس
-// =========================================================
-
 const findColumnIndex = (headerRow, possibleNames) => {
   const normalize = (s) =>
     String(s || "")
+      .replace(/[\u200B\u200E\u200F\uFEFF]/g, "") // remove invisible chars
+      .replace(/[\u064B-\u065F\u0670]/g, "")       // remove Arabic diacritics
+      .replace(/[أإآ]/g, "ا")                       // unify alef forms
+      .replace(/ى/g, "ي")                           // unify yeh forms
+      .replace(/ة/g, "ه")                           // unify teh marbuta
       .trim()
       .toLowerCase()
+      .replace(/[*:،,]/g, "")                       // strip stray punctuation
       .replace(/\s+/g, " ");
 
   const normalizedHeaders = headerRow.map((h) => normalize(h));
@@ -1835,13 +1837,13 @@ exports.previewEmployeeImport = async (req, res) => {
       "role",
     ]);
 
-    if (nameIdx === -1 || emailIdx === -1) {
-      return res.status(400).json({
-        message:
-          "لم يتم العثور على عمود 'الاسم' أو 'البريد الإلكتروني'. تأكد من رؤوس الأعمدة.",
-      });
-    }
-
+ if (nameIdx === -1 || emailIdx === -1) {
+  console.log("HEADER ROW RAW:", JSON.stringify(headerRow));
+  return res.status(400).json({
+    message:
+      "لم يتم العثور على عمود 'الاسم' أو 'البريد الإلكتروني'. تأكد من رؤوس الأعمدة.",
+  });
+}
     const dataRows = rows.slice(1);
 
     const departmentsResult = await pool.query(
