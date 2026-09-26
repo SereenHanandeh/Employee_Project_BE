@@ -18,10 +18,30 @@ const {
   getJobDescriptionTrash,
   restoreJobDescription,
   permanentlyDeleteJobDescription,
+  previewJobDescriptionImport,
+  confirmJobDescriptionImport,
 } = require("../controllers/employee");
 
 const auth = require("../middleware/auth");
 const isAdmin = require("../middleware/isAdmin");
+
+const multer = require("multer");
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (req, file, cb) => {
+    const allowed = [
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ];
+
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("الرجاء رفع ملف Word بصيغة .docx فقط"));
+    }
+  },
+});
 
 // =========================================================
 // CURRENT USER
@@ -103,6 +123,19 @@ employeeRouter.delete(
   "/job-descriptions/trash/:trashId",
   isAdmin,
   permanentlyDeleteJobDescription,
+);
+
+router.post(
+  "/job-descriptions/import/preview",
+  isAdmin,
+  upload.single("file"),
+  previewJobDescriptionImport,
+);
+
+router.put(
+  "/job-descriptions/import/confirm",
+  isAdmin,
+  confirmJobDescriptionImport,
 );
 
 module.exports = employeeRouter;
