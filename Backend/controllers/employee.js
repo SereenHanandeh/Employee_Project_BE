@@ -1,5 +1,7 @@
 const { pool } = require("../models/db");
 const bcrypt = require("bcryptjs");
+const mammoth = require("mammoth");
+const cheerio = require("cheerio");
 
 // =========================================================
 // HELPER - VALIDATE DEPARTMENT
@@ -1729,10 +1731,6 @@ exports.permanentlyDeleteJobDescription = async (req, res) => {
     });
   }
 };
-
-
-const mammoth = require("mammoth");
-const cheerio = require("cheerio");
 
 // =========================================================
 // HELPER - تحويل جدول HTML إلى مصفوفة (يتعامل مع rowspan/colspan)
