@@ -1750,23 +1750,27 @@ const excelBufferToRows = (buffer) => {
 const findColumnIndex = (headerRow, possibleNames) => {
   const normalize = (s) =>
     String(s || "")
-      .replace(/[\u200B\u200E\u200F\uFEFF]/g, "") // remove invisible chars
-      .replace(/[\u064B-\u065F\u0670]/g, "")       // remove Arabic diacritics
-      .replace(/[أإآ]/g, "ا")                       // unify alef forms
-      .replace(/ى/g, "ي")                           // unify yeh forms
-      .replace(/ة/g, "ه")                           // unify teh marbuta
+      .replace(/[\u200B\u200E\u200F\uFEFF]/g, "")
+      .replace(/[\u064B-\u065F\u0670]/g, "")
+      .replace(/[أإآ]/g, "ا")
+      .replace(/ى/g, "ي")
+      .replace(/ة/g, "ه")
       .trim()
       .toLowerCase()
-      .replace(/[*:،,]/g, "")                       // strip stray punctuation
+      .replace(/[*:،,]/g, "")
       .replace(/\s+/g, " ");
 
   const normalizedHeaders = headerRow.map((h) => normalize(h));
   const normalizedTargets = possibleNames.map((n) => normalize(n));
 
   for (let i = 0; i < normalizedHeaders.length; i++) {
-    if (normalizedTargets.includes(normalizedHeaders[i])) {
-      return i;
-    }
+    const header = normalizedHeaders[i];
+
+    const isMatch = normalizedTargets.some(
+      (target) => header.includes(target) || target.includes(header)
+    );
+
+    if (isMatch) return i;
   }
 
   return -1;
