@@ -114,6 +114,27 @@ job_description TEXT,
     );
 
 
+        /* =============================
+      JOB DESCRIPTION TRASH
+    ============================= */
+
+    CREATE TABLE IF NOT EXISTS job_description_trash(
+      trash_id SERIAL PRIMARY KEY,
+
+      employee_id INT NOT NULL
+        REFERENCES employees(employee_id)
+        ON DELETE CASCADE,
+
+      employee_name VARCHAR(255),
+
+      job_description_points JSONB NOT NULL DEFAULT '[]',
+
+      deleted_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_jd_trash_employee_id
+    ON job_description_trash(employee_id);
+    
     /* =============================
             LEAVES
     ============================= */

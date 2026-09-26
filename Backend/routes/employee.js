@@ -14,6 +14,10 @@ const {
   markWelcomeSeen,
   getJobDescriptions,
   updateJobDescription,
+  deleteJobDescription,
+  getJobDescriptionTrash,
+  restoreJobDescription,
+  permanentlyDeleteJobDescription,
 } = require("../controllers/employee");
 
 const auth = require("../middleware/auth");
@@ -85,12 +89,20 @@ employeeRouter.put("/:id/restore", auth, isAdmin, restoreEmployee);
 
 employeeRouter.get("/deleted", auth, isAdmin, getDeletedEmployees);
 
-employeeRouter.get("/job-descriptions", isAdmin, getJobDescriptions);
+router.get("/job-descriptions", isAdmin, getJobDescriptions);
+router.put("/:id/job-description", isAdmin, updateJobDescription);
+router.delete("/:id/job-description", isAdmin, deleteJobDescription);
 
-employeeRouter.put(
-  "/:id/job-description",
+router.get("/job-descriptions/trash", verifyAdmin, getJobDescriptionTrash);
+router.put(
+  "/job-descriptions/trash/:trashId/restore",
   isAdmin,
-  updateJobDescription,
+  restoreJobDescription,
+);
+router.delete(
+  "/job-descriptions/trash/:trashId",
+  isAdmin,
+  permanentlyDeleteJobDescription,
 );
 
 module.exports = employeeRouter;

@@ -1398,7 +1398,25 @@ exports.markWelcomeSeen = async (req, res) => {
 };
 
 // =========================================================
-// GET JOB DESCRIPTIONS (كل الموظفين + مهامهم + وصفهم الوظيفي)
+// HELPER - PARSE JOB DESCRIPTION POINTS
+// =========================================================
+
+const parseJobPoints = (raw) => {
+  if (!raw) return [];
+
+  if (Array.isArray(raw)) return raw;
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [String(raw)];
+  } catch {
+    // بيانات قديمة كانت نص عادي وليست JSON
+    return [String(raw)];
+  }
+};
+
+// =========================================================
+// GET JOB DESCRIPTIONS
 // =========================================================
 
 exports.getJobDescriptions = async (req, res) => {
@@ -1441,7 +1459,12 @@ exports.getJobDescriptions = async (req, res) => {
       ORDER BY e.name ASC
     `);
 
-    return res.json(result.rows);
+    const employees = result.rows.map((emp) => ({
+      ...emp,
+      job_description_points: parseJobPoints(emp.job_description),
+    }));
+
+    return res.json(employees);
   } catch (err) {
     console.error("Get Job Descriptions Error:", err);
     return res.status(500).json({
@@ -1451,13 +1474,13 @@ exports.getJobDescriptions = async (req, res) => {
 };
 
 // =========================================================
-// UPDATE JOB DESCRIPTION
+// UPDATE JOB DESCRIPTION (نقاط متعددة)
 // =========================================================
 
 exports.updateJobDescription = async (req, res) => {
   try {
     const { id } = req.params;
-    const { job_description } = req.body;
+    const { points } = req.body;
 
     const employeeId = Number(id);
 
@@ -1465,15 +1488,21 @@ exports.updateJobDescription = async (req, res) => {
       return res.status(400).json({ message: "معرف الموظف غير صالح" });
     }
 
+    const cleanPoints = Array.isArray(points)
+      ? points
+          .map((p) => String(p).trim())
+          .filter((p) => p.length > 0)
+      : [];
+
     const result = await pool.query(
       `
       UPDATE employees
       SET job_description = $1
       WHERE employee_id = $2
         AND is_deleted = 0
-      RETURNING employee_id, job_description
+      RETURNING employee_id
       `,
-      [job_description?.trim() || null, employeeId]
+      [JSON.stringify(cleanPoints), employeeId]
     );
 
     if (result.rows.length === 0) {
@@ -1482,12 +1511,221 @@ exports.updateJobDescription = async (req, res) => {
 
     return res.json({
       message: "تم تحديث الوصف الوظيفي بنجاح",
-      employee: result.rows[0],
+      employee_id: employeeId,
+      job_description_points: cleanPoints,
     });
   } catch (err) {
     console.error("Update Job Description Error:", err);
     return res.status(500).json({
       message: "حدث خطأ أثناء تحديث الوصف الوظيفي",
+    });
+  }
+};
+
+// =========================================================
+// DELETE JOB DESCRIPTION (نقل لسلة المهملات)
+// =========================================================
+
+exports.deleteJobDescription = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const { id } = req.params;
+    const employeeId = Number(id);
+
+    if (!Number.isInteger(employeeId) || employeeId <= 0) {
+      client.release();
+      return res.status(400).json({ message: "معرف الموظف غير صالح" });
+    }
+
+    const empResult = await client.query(
+      `
+      SELECT employee_id, name, job_description
+      FROM employees
+      WHERE employee_id = $1
+        AND is_deleted = 0
+      LIMIT 1
+      `,
+      [employeeId]
+    );
+
+    if (empResult.rows.length === 0) {
+      client.release();
+      return res.status(404).json({ message: "الموظف غير موجود" });
+    }
+
+    const employee = empResult.rows[0];
+    const points = parseJobPoints(employee.job_description);
+
+    if (points.length === 0) {
+      client.release();
+      return res.status(400).json({
+        message: "لا يوجد وصف وظيفي لحذفه",
+      });
+    }
+
+    await client.query("BEGIN");
+
+    await client.query(
+      `
+      INSERT INTO job_description_trash
+        (employee_id, employee_name, job_description_points)
+      VALUES ($1, $2, $3)
+      `,
+      [employeeId, employee.name, JSON.stringify(points)]
+    );
+
+    await client.query(
+      `UPDATE employees SET job_description = NULL WHERE employee_id = $1`,
+      [employeeId]
+    );
+
+    await client.query("COMMIT");
+
+    return res.json({
+      message: "تم نقل الوصف الوظيفي إلى سلة المهملات",
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Delete Job Description Error:", err);
+    return res.status(500).json({
+      message: "حدث خطأ أثناء حذف الوصف الوظيفي",
+    });
+  } finally {
+    client.release();
+  }
+};
+
+// =========================================================
+// GET TRASH LIST
+// =========================================================
+
+exports.getJobDescriptionTrash = async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        trash_id,
+        employee_id,
+        employee_name,
+        job_description_points,
+        deleted_at
+      FROM job_description_trash
+      ORDER BY deleted_at DESC
+    `);
+
+    return res.json(result.rows);
+  } catch (err) {
+    console.error("Get Job Description Trash Error:", err);
+    return res.status(500).json({
+      message: "حدث خطأ أثناء تحميل سلة المهملات",
+    });
+  }
+};
+
+// =========================================================
+// RESTORE FROM TRASH
+// =========================================================
+
+exports.restoreJobDescription = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const { trashId } = req.params;
+    const id = Number(trashId);
+
+    if (!Number.isInteger(id) || id <= 0) {
+      client.release();
+      return res.status(400).json({ message: "معرف غير صالح" });
+    }
+
+    const trashResult = await client.query(
+      `SELECT * FROM job_description_trash WHERE trash_id = $1 LIMIT 1`,
+      [id]
+    );
+
+    if (trashResult.rows.length === 0) {
+      client.release();
+      return res.status(404).json({
+        message: "العنصر غير موجود في سلة المهملات",
+      });
+    }
+
+    const trashItem = trashResult.rows[0];
+
+    const employeeCheck = await client.query(
+      `
+      SELECT employee_id
+      FROM employees
+      WHERE employee_id = $1
+        AND is_deleted = 0
+      LIMIT 1
+      `,
+      [trashItem.employee_id]
+    );
+
+    if (employeeCheck.rows.length === 0) {
+      client.release();
+      return res.status(404).json({
+        message: "لا يمكن الاسترجاع، الموظف غير موجود حالياً",
+      });
+    }
+
+    await client.query("BEGIN");
+
+    await client.query(
+      `UPDATE employees SET job_description = $1 WHERE employee_id = $2`,
+      [
+        JSON.stringify(trashItem.job_description_points),
+        trashItem.employee_id,
+      ]
+    );
+
+    await client.query(
+      `DELETE FROM job_description_trash WHERE trash_id = $1`,
+      [id]
+    );
+
+    await client.query("COMMIT");
+
+    return res.json({ message: "تم استرجاع الوصف الوظيفي بنجاح" });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Restore Job Description Error:", err);
+    return res.status(500).json({
+      message: "حدث خطأ أثناء استرجاع الوصف الوظيفي",
+    });
+  } finally {
+    client.release();
+  }
+};
+
+// =========================================================
+// PERMANENTLY DELETE FROM TRASH
+// =========================================================
+
+exports.permanentlyDeleteJobDescription = async (req, res) => {
+  try {
+    const { trashId } = req.params;
+    const id = Number(trashId);
+
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ message: "معرف غير صالح" });
+    }
+
+    const result = await pool.query(
+      `DELETE FROM job_description_trash WHERE trash_id = $1 RETURNING trash_id`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "العنصر غير موجود" });
+    }
+
+    return res.json({ message: "تم الحذف النهائي بنجاح" });
+  } catch (err) {
+    console.error("Permanently Delete Job Description Error:", err);
+    return res.status(500).json({
+      message: "حدث خطأ أثناء الحذف النهائي",
     });
   }
 };
