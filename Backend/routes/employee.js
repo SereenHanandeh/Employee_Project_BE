@@ -18,10 +18,10 @@ const {
   getJobDescriptionTrash,
   restoreJobDescription,
   permanentlyDeleteJobDescription,
+  previewJobDescriptionImport,
+  confirmJobDescriptionImport,
   previewEmployeeImport,
-  
-confirmEmployeeImport
-
+  confirmEmployeeImport,
 } = require("../controllers/employee");
 
 const auth = require("../middleware/auth");
@@ -29,7 +29,11 @@ const isAdmin = require("../middleware/isAdmin");
 
 const multer = require("multer");
 
-const upload = multer({
+// =========================================================
+// UPLOAD - ملفات Word (استيراد الوصف الوظيفي)
+// =========================================================
+
+const uploadWord = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (req, file, cb) => {
@@ -41,6 +45,27 @@ const upload = multer({
       cb(null, true);
     } else {
       cb(new Error("الرجاء رفع ملف Word بصيغة .docx فقط"));
+    }
+  },
+});
+
+// =========================================================
+// UPLOAD - ملفات Excel (استيراد الموظفين)
+// =========================================================
+
+const uploadExcel = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (req, file, cb) => {
+    const allowed = [
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+      "application/vnd.ms-excel", // .xls
+    ];
+
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("الرجاء رفع ملف إكسل بصيغة .xlsx أو .xls فقط"));
     }
   },
 });
@@ -111,6 +136,10 @@ employeeRouter.put("/:id/restore", auth, isAdmin, restoreEmployee);
 
 employeeRouter.get("/deleted", auth, isAdmin, getDeletedEmployees);
 
+// =========================================================
+// JOB DESCRIPTIONS
+// =========================================================
+
 employeeRouter.get("/job-descriptions", isAdmin, getJobDescriptions);
 employeeRouter.put("/:id/job-description", isAdmin, updateJobDescription);
 employeeRouter.delete("/:id/job-description", isAdmin, deleteJobDescription);
@@ -127,16 +156,42 @@ employeeRouter.delete(
   permanentlyDeleteJobDescription,
 );
 
+// =========================================================
+// JOB DESCRIPTION IMPORT (Word)
+// =========================================================
+
+employeeRouter.post(
+  "/job-description/import/preview",
+  auth,
+  isAdmin,
+  uploadWord.single("file"),
+  previewJobDescriptionImport,
+);
+
+employeeRouter.post(
+  "/job-description/import/confirm",
+  auth,
+  isAdmin,
+  confirmJobDescriptionImport,
+);
+
+// =========================================================
+// EMPLOYEES IMPORT (Excel)
+// =========================================================
 
 employeeRouter.post(
   "/import/preview",
-  upload.single("file"), 
-previewEmployeeImport
+  auth,
+  isAdmin,
+  uploadExcel.single("file"),
+  previewEmployeeImport,
 );
 
 employeeRouter.post(
   "/import/confirm",
-  confirmEmployeeImport
+  auth,
+  isAdmin,
+  confirmEmployeeImport,
 );
 
 module.exports = employeeRouter;
