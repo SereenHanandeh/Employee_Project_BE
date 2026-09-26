@@ -125,17 +125,6 @@ employeeRouter.delete(
   permanentlyDeleteJobDescription,
 );
 
-employeeRouter.post(
-  "/job-descriptions/import/preview",
-  isAdmin,
-  upload.single("file"),
-  previewJobDescriptionImport,
-);
 
-employeeRouter.put(
-  "/job-descriptions/import/confirm",
-  isAdmin,
-  confirmJobDescriptionImport,
-);
 
 module.exports = employeeRouter;
