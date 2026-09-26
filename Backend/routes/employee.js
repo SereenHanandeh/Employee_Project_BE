@@ -22,6 +22,9 @@ const {
   confirmJobDescriptionImport,
   previewEmployeeImport,
   confirmEmployeeImport,
+  uploadJobDescriptionFile,
+  getJobDescriptionFile,
+  deleteJobDescriptionFile,
 } = require("../controllers/employee");
 
 const auth = require("../middleware/auth");
@@ -48,6 +51,11 @@ const uploadExcel = multer({
       cb(new Error("الرجاء رفع ملف إكسل بصيغة .xlsx أو .xls فقط"));
     }
   },
+});
+
+const uploadDocument = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
 });
 
 // =========================================================
@@ -125,6 +133,25 @@ employeeRouter.post(
   auth,
   isAdmin,
   confirmEmployeeImport,
+);
+
+employeeRouter.post(
+  "/:id/job-description/file",
+  isAdmin,
+  uploadDocument.single("file"),
+  uploadJobDescriptionFile,
+);
+
+employeeRouter.get(
+  "/:id/job-description/file",
+  isAdmin,
+  getJobDescriptionFile,
+);
+
+employeeRouter.delete(
+  "/:id/job-description/file",
+  isAdmin,
+  deleteJobDescriptionFile,
 );
 
 module.exports = employeeRouter;

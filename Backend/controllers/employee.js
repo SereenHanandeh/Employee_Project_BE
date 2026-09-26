@@ -1432,6 +1432,11 @@ exports.getJobDescriptions = async (req, res) => {
         e.role,
         e.created_at,
 
+        e.job_description_file_name,
+        e.job_description_file_mimetype,
+        e.job_description_file_uploaded_at,
+        (e.job_description_file IS NOT NULL) AS has_job_description_file,
+
         COALESCE(d.name, e.department) AS department_name,
 
         COALESCE(
@@ -2324,5 +2329,156 @@ exports.confirmJobDescriptionImport = async (req, res) => {
     });
   } finally {
     client.release();
+  }
+};
+
+// =========================================================
+// UPLOAD JOB DESCRIPTION FILE
+// =========================================================
+
+exports.uploadJobDescriptionFile = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const employeeId = Number(id);
+
+    if (!Number.isInteger(employeeId) || employeeId <= 0) {
+      return res.status(400).json({ message: "معرف الموظف غير صالح" });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: "الرجاء رفع ملف" });
+    }
+
+    const employeeCheck = await pool.query(
+      `SELECT employee_id FROM employees WHERE employee_id = $1 AND is_deleted = 0 LIMIT 1`,
+      [employeeId]
+    );
+
+    if (employeeCheck.rows.length === 0) {
+      return res.status(404).json({ message: "الموظف غير موجود" });
+    }
+
+    await pool.query(
+      `
+      UPDATE employees
+      SET
+        job_description_file = $1,
+        job_description_file_name = $2,
+        job_description_file_mimetype = $3,
+        job_description_file_uploaded_at = NOW()
+      WHERE employee_id = $4
+      `,
+      [req.file.buffer, req.file.originalname, req.file.mimetype, employeeId]
+    );
+
+    return res.json({
+      message: "تم رفع الملف بنجاح",
+      file_name: req.file.originalname,
+    });
+  } catch (err) {
+    console.error("Upload Job Description File Error:", err);
+    return res.status(500).json({
+      message: "حدث خطأ أثناء رفع الملف",
+    });
+  }
+};
+
+// =========================================================
+// GET / VIEW / DOWNLOAD JOB DESCRIPTION FILE
+// =========================================================
+
+exports.getJobDescriptionFile = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const employeeId = Number(id);
+
+    if (!Number.isInteger(employeeId) || employeeId <= 0) {
+      return res.status(400).json({ message: "معرف الموظف غير صالح" });
+    }
+
+    const result = await pool.query(
+      `
+      SELECT
+        job_description_file,
+        job_description_file_name,
+        job_description_file_mimetype
+      FROM employees
+      WHERE employee_id = $1
+      LIMIT 1
+      `,
+      [employeeId]
+    );
+
+    if (result.rows.length === 0 || !result.rows[0].job_description_file) {
+      return res.status(404).json({
+        message: "لا يوجد ملف مرفوع لهذا الموظف",
+      });
+    }
+
+    const file = result.rows[0];
+
+    const disposition =
+      req.query.download === "true" ? "attachment" : "inline";
+
+    const safeFileName = encodeURIComponent(
+      file.job_description_file_name || "file"
+    );
+
+    res.setHeader(
+      "Content-Type",
+      file.job_description_file_mimetype || "application/octet-stream"
+    );
+
+    res.setHeader(
+      "Content-Disposition",
+      `${disposition}; filename="${safeFileName}"`
+    );
+
+    return res.send(file.job_description_file);
+  } catch (err) {
+    console.error("Get Job Description File Error:", err);
+    return res.status(500).json({
+      message: "حدث خطأ أثناء تحميل الملف",
+    });
+  }
+};
+
+// =========================================================
+// DELETE JOB DESCRIPTION FILE
+// =========================================================
+
+exports.deleteJobDescriptionFile = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const employeeId = Number(id);
+
+    if (!Number.isInteger(employeeId) || employeeId <= 0) {
+      return res.status(400).json({ message: "معرف الموظف غير صالح" });
+    }
+
+    const result = await pool.query(
+      `
+      UPDATE employees
+      SET
+        job_description_file = NULL,
+        job_description_file_name = NULL,
+        job_description_file_mimetype = NULL,
+        job_description_file_uploaded_at = NULL
+      WHERE employee_id = $1
+      RETURNING employee_id
+      `,
+      [employeeId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "الموظف غير موجود" });
+    }
+
+    return res.json({ message: "تم حذف الملف بنجاح" });
+  } catch (err) {
+    console.error("Delete Job Description File Error:", err);
+    return res.status(500).json({
+      message: "حدث خطأ أثناء حذف الملف",
+    });
   }
 };
