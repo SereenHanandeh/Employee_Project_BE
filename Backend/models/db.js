@@ -77,6 +77,8 @@ const createTables = async () => {
 
       position VARCHAR(255),
 
+      position VARCHAR(255),
+job_description TEXT,   
       email VARCHAR(255) UNIQUE,
       password VARCHAR(255),
 

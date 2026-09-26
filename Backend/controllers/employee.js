@@ -1396,3 +1396,98 @@ exports.markWelcomeSeen = async (req, res) => {
     });
   }
 };
+
+// =========================================================
+// GET JOB DESCRIPTIONS (كل الموظفين + مهامهم + وصفهم الوظيفي)
+// =========================================================
+
+exports.getJobDescriptions = async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        e.employee_id,
+        e.name,
+        e.email,
+        e.position,
+        e.job_description,
+        e.role,
+        e.created_at,
+
+        COALESCE(d.name, e.department) AS department_name,
+
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'task_id', t.task_id,
+              'title', t.title,
+              'description', t.description,
+              'status', et.status
+            )
+          ) FILTER (WHERE t.task_id IS NOT NULL),
+          '[]'
+        ) AS tasks
+
+      FROM employees e
+      LEFT JOIN departments d
+        ON d.department_id = e.department_id
+      LEFT JOIN employee_tasks et
+        ON et.employee_id = e.employee_id
+      LEFT JOIN tasks t
+        ON t.task_id = et.task_id
+
+      WHERE e.is_deleted = 0
+
+      GROUP BY e.employee_id, d.name
+      ORDER BY e.name ASC
+    `);
+
+    return res.json(result.rows);
+  } catch (err) {
+    console.error("Get Job Descriptions Error:", err);
+    return res.status(500).json({
+      message: "حدث خطأ أثناء تحميل الوصف الوظيفي",
+    });
+  }
+};
+
+// =========================================================
+// UPDATE JOB DESCRIPTION
+// =========================================================
+
+exports.updateJobDescription = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { job_description } = req.body;
+
+    const employeeId = Number(id);
+
+    if (!Number.isInteger(employeeId) || employeeId <= 0) {
+      return res.status(400).json({ message: "معرف الموظف غير صالح" });
+    }
+
+    const result = await pool.query(
+      `
+      UPDATE employees
+      SET job_description = $1
+      WHERE employee_id = $2
+        AND is_deleted = 0
+      RETURNING employee_id, job_description
+      `,
+      [job_description?.trim() || null, employeeId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "الموظف غير موجود" });
+    }
+
+    return res.json({
+      message: "تم تحديث الوصف الوظيفي بنجاح",
+      employee: result.rows[0],
+    });
+  } catch (err) {
+    console.error("Update Job Description Error:", err);
+    return res.status(500).json({
+      message: "حدث خطأ أثناء تحديث الوصف الوظيفي",
+    });
+  }
+};

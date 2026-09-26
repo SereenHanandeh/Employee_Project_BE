@@ -12,6 +12,8 @@ const {
   updateMyProfile,
   changeMyPassword,
   markWelcomeSeen,
+  getJobDescriptions,
+  updateJobDescription,
 } = require("../controllers/employee");
 
 const auth = require("../middleware/auth");
@@ -21,117 +23,73 @@ const isAdmin = require("../middleware/isAdmin");
 // CURRENT USER
 // =========================================================
 
-employeeRouter.get(
-  "/me",
-  auth,
-  getMe
-);
+employeeRouter.get("/me", auth, getMe);
 
 // =========================================================
 // MARK WELCOME AS SEEN
 // =========================================================
 
-employeeRouter.put(
-  "/me/welcome",
-  auth,
-  markWelcomeSeen
-);
+employeeRouter.put("/me/welcome", auth, markWelcomeSeen);
 
 // =========================================================
 // UPDATE MY PROFILE
 // =========================================================
 
-employeeRouter.put(
-  "/me",
-  auth,
-  updateMyProfile
-);
+employeeRouter.put("/me", auth, updateMyProfile);
 
 // =========================================================
 // CHANGE MY PASSWORD
 // =========================================================
 
-employeeRouter.put(
-  "/me/password",
-  auth,
-  changeMyPassword
-);
+employeeRouter.put("/me/password", auth, changeMyPassword);
 
 // =========================================================
 // ACTIVE EMPLOYEES
 // =========================================================
 
-employeeRouter.get(
-  "/active",
-  auth,
-  isAdmin,
-  getActiveEmployees
-);
+employeeRouter.get("/active", auth, isAdmin, getActiveEmployees);
 
 // =========================================================
 // ALL EMPLOYEES
 // =========================================================
 
-employeeRouter.get(
-  "/",
-  auth,
-  isAdmin,
-  getEmployees
-);
+employeeRouter.get("/", auth, isAdmin, getEmployees);
 
 // =========================================================
 // CREATE EMPLOYEE
 // =========================================================
 
-employeeRouter.post(
-  "/",
-  auth,
-  isAdmin,
-  createEmployee
-);
+employeeRouter.post("/", auth, isAdmin, createEmployee);
 
 // =========================================================
 // DELETE EMPLOYEE
 // =========================================================
 
-employeeRouter.delete(
-  "/:id/delete",
-  auth,
-  isAdmin,
-  deleteEmployee
-);
+employeeRouter.delete("/:id/delete", auth, isAdmin, deleteEmployee);
 
 // =========================================================
 // UPDATE EMPLOYEE
 // =========================================================
 
-employeeRouter.put(
-  "/:id/update",
-  auth,
-  isAdmin,
-  updateEmployee
-);
+employeeRouter.put("/:id/update", auth, isAdmin, updateEmployee);
 
 // =========================================================
 // RESTORE EMPLOYEE
 // =========================================================
 
-employeeRouter.put(
-  "/:id/restore",
-  auth,
-  isAdmin,
-  restoreEmployee
-);
+employeeRouter.put("/:id/restore", auth, isAdmin, restoreEmployee);
 
 // =========================================================
 // DELETED EMPLOYEES
 // =========================================================
 
-employeeRouter.get(
-  "/deleted",
-  auth,
+employeeRouter.get("/deleted", auth, isAdmin, getDeletedEmployees);
+
+employeeRouter.get("/employees/job-descriptions", isAdmin, getJobDescriptions);
+employeeRouter.put(
+  "/employees/:id/job-description",
   isAdmin,
-  getDeletedEmployees
+  updateJobDescription,
 );
 
 module.exports = employeeRouter;
