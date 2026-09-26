@@ -18,8 +18,6 @@ const {
   getJobDescriptionTrash,
   restoreJobDescription,
   permanentlyDeleteJobDescription,
-  previewJobDescriptionImport,
-  confirmJobDescriptionImport,
   previewEmployeeImport,
   confirmEmployeeImport,
 } = require("../controllers/employee");
@@ -28,26 +26,6 @@ const auth = require("../middleware/auth");
 const isAdmin = require("../middleware/isAdmin");
 
 const multer = require("multer");
-
-// =========================================================
-// UPLOAD - ملفات Word (استيراد الوصف الوظيفي)
-// =========================================================
-
-const uploadWord = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-  fileFilter: (req, file, cb) => {
-    const allowed = [
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ];
-
-    if (allowed.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error("الرجاء رفع ملف Word بصيغة .docx فقط"));
-    }
-  },
-});
 
 // =========================================================
 // UPLOAD - ملفات Excel (استيراد الموظفين)
@@ -154,25 +132,6 @@ employeeRouter.delete(
   "/job-descriptions/trash/:trashId",
   isAdmin,
   permanentlyDeleteJobDescription,
-);
-
-// =========================================================
-// JOB DESCRIPTION IMPORT (Word)
-// =========================================================
-
-employeeRouter.post(
-  "/job-description/import/preview",
-  auth,
-  isAdmin,
-  uploadWord.single("file"),
-  previewJobDescriptionImport,
-);
-
-employeeRouter.post(
-  "/job-description/import/confirm",
-  auth,
-  isAdmin,
-  confirmJobDescriptionImport,
 );
 
 // =========================================================
