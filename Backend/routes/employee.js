@@ -89,17 +89,17 @@ employeeRouter.put("/:id/restore", auth, isAdmin, restoreEmployee);
 
 employeeRouter.get("/deleted", auth, isAdmin, getDeletedEmployees);
 
-router.get("/job-descriptions", isAdmin, getJobDescriptions);
-router.put("/:id/job-description", isAdmin, updateJobDescription);
-router.delete("/:id/job-description", isAdmin, deleteJobDescription);
+employeeRouter.get("/job-descriptions", isAdmin, getJobDescriptions);
+employeeRouter.put("/:id/job-description", isAdmin, updateJobDescription);
+employeeRouter.delete("/:id/job-description", isAdmin, deleteJobDescription);
 
-router.get("/job-descriptions/trash", verifyAdmin, getJobDescriptionTrash);
-router.put(
+employeeRouter.get("/job-descriptions/trash", verifyAdmin, getJobDescriptionTrash);
+employeeRouter.put(
   "/job-descriptions/trash/:trashId/restore",
   isAdmin,
   restoreJobDescription,
 );
-router.delete(
+employeeRouter.delete(
   "/job-descriptions/trash/:trashId",
   isAdmin,
   permanentlyDeleteJobDescription,
