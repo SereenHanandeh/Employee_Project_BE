@@ -85,9 +85,10 @@ employeeRouter.put("/:id/restore", auth, isAdmin, restoreEmployee);
 
 employeeRouter.get("/deleted", auth, isAdmin, getDeletedEmployees);
 
-employeeRouter.get("/employees/job-descriptions", isAdmin, getJobDescriptions);
+employeeRouter.get("/job-descriptions", isAdmin, getJobDescriptions);
+
 employeeRouter.put(
-  "/employees/:id/job-description",
+  "/:id/job-description",
   isAdmin,
   updateJobDescription,
 );
