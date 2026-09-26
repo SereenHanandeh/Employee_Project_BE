@@ -18,8 +18,10 @@ const {
   getJobDescriptionTrash,
   restoreJobDescription,
   permanentlyDeleteJobDescription,
-  previewJobDescriptionImport,
-  confirmJobDescriptionImport,
+  previewEmployeeImport,
+  
+confirmEmployeeImport
+
 } = require("../controllers/employee");
 
 const auth = require("../middleware/auth");
@@ -126,5 +128,15 @@ employeeRouter.delete(
 );
 
 
+employeeRouter.post(
+  "/import/preview",
+  upload.single("file"), 
+previewEmployeeImport
+);
+
+employeeRouter.post(
+  "/import/confirm",
+  confirmEmployeeImport
+);
 
 module.exports = employeeRouter;

@@ -1,5 +1,6 @@
 const { pool } = require("../models/db");
 const bcrypt = require("bcryptjs");
+const XLSX = require("xlsx");
 
 // =========================================================
 // HELPER - VALIDATE DEPARTMENT
@@ -1730,4 +1731,316 @@ exports.permanentlyDeleteJobDescription = async (req, res) => {
   }
 };
 
+
+
+// =========================================================
+// HELPER - تحويل ملف إكسل إلى مصفوفة صفوف
+// =========================================================
+
+const excelBufferToRows = (buffer) => {
+  const workbook = XLSX.read(buffer, { type: "buffer" });
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  return XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    defval: "",
+  });
+};
+
+// =========================================================
+// PREVIEW EMPLOYEES EXCEL IMPORT
+// =========================================================
+
+exports.previewEmployeeImport = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        message: "الرجاء رفع ملف إكسل",
+      });
+    }
+
+    let rows;
+
+    try {
+      rows = excelBufferToRows(req.file.buffer);
+    } catch (e) {
+      return res.status(400).json({
+        message: "تعذر قراءة الملف، تأكد أنه ملف إكسل صالح",
+      });
+    }
+
+    rows = rows.filter((row) =>
+      row.some((cell) => String(cell || "").trim() !== "")
+    );
+
+    if (rows.length < 2) {
+      return res.status(400).json({
+        message: "الملف فارغ أو لا يحتوي على بيانات",
+      });
+    }
+
+    const headerRow = rows[0];
+
+    const nameIdx = findColumnIndex(headerRow, [
+      "الاسم",
+      "اسم الموظف",
+      "name",
+    ]);
+    const emailIdx = findColumnIndex(headerRow, [
+      "البريد",
+      "الإيميل",
+      "email",
+    ]);
+    const departmentIdx = findColumnIndex(headerRow, [
+      "القسم",
+      "department",
+    ]);
+    const positionIdx = findColumnIndex(headerRow, [
+      "المسمى الوظيفي",
+      "المسمى",
+      "المنصب",
+      "position",
+    ]);
+    const passwordIdx = findColumnIndex(headerRow, [
+      "كلمة المرور",
+      "الباسورد",
+      "password",
+    ]);
+    const roleIdx = findColumnIndex(headerRow, [
+      "الدور",
+      "الصلاحية",
+      "role",
+    ]);
+
+    if (nameIdx === -1 || emailIdx === -1) {
+      return res.status(400).json({
+        message:
+          "لم يتم العثور على عمود 'الاسم' أو 'البريد الإلكتروني'. تأكد من رؤوس الأعمدة.",
+      });
+    }
+
+    const dataRows = rows.slice(1);
+
+    const departmentsResult = await pool.query(
+      `SELECT department_id, name FROM departments WHERE is_deleted = 0`
+    );
+
+    const normalize = (s) =>
+      String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+
+    const departmentsMap = departmentsResult.rows.map((d) => ({
+      department_id: d.department_id,
+      name: d.name,
+      normalized: normalize(d.name),
+    }));
+
+    const employeesResult = await pool.query(
+      `SELECT email FROM employees WHERE is_deleted = 0`
+    );
+
+    const existingEmails = new Set(
+      employeesResult.rows.map((e) => normalize(e.email))
+    );
+
+    const seenEmailsInFile = new Set();
+
+    const preview = dataRows.map((row) => {
+      const rawName = String(row[nameIdx] || "").trim();
+      const rawEmail = String(row[emailIdx] || "").trim();
+      const rawDepartment =
+        departmentIdx !== -1
+          ? String(row[departmentIdx] || "").trim()
+          : "";
+      const rawPosition =
+        positionIdx !== -1
+          ? String(row[positionIdx] || "").trim()
+          : "";
+      const rawPassword =
+        passwordIdx !== -1
+          ? String(row[passwordIdx] || "").trim()
+          : "";
+      const rawRole =
+        roleIdx !== -1
+          ? String(row[roleIdx] || "").trim().toLowerCase()
+          : "";
+
+      const errors = [];
+
+      if (!rawName) errors.push("الاسم مفقود");
+      if (!rawEmail) errors.push("البريد الإلكتروني مفقود");
+
+      const normalizedEmail = normalize(rawEmail);
+
+      if (rawEmail && existingEmails.has(normalizedEmail)) {
+        errors.push("البريد مستخدم مسبقاً في النظام");
+      }
+
+      if (rawEmail && seenEmailsInFile.has(normalizedEmail)) {
+        errors.push("البريد مكرر داخل الملف");
+      }
+
+      if (normalizedEmail) seenEmailsInFile.add(normalizedEmail);
+
+      let matchedDepartment = null;
+
+      if (rawDepartment) {
+        matchedDepartment = departmentsMap.find(
+          (d) => d.normalized === normalize(rawDepartment)
+        );
+
+        if (!matchedDepartment) {
+          errors.push(`القسم "${rawDepartment}" غير موجود`);
+        }
+      } else {
+        errors.push("القسم مفقود");
+      }
+
+      const role = ["employee", "admin"].includes(rawRole)
+        ? rawRole
+        : "employee";
+
+const password = rawPassword || "123456";
+
+     return {
+  raw_name: rawName,
+  raw_email: rawEmail,
+  raw_department: rawDepartment,
+  department_id: matchedDepartment?.department_id || null,
+  department_name: matchedDepartment?.name || null,
+  position: rawPosition || null,
+  role,
+  password,
+  password_was_generated: !rawPassword, // يعني استخدمنا الافتراضية 123456
+  valid: errors.length === 0,
+  errors,
+};
+    });
+
+    return res.json({
+      total_rows: preview.length,
+      valid_count: preview.filter((p) => p.valid).length,
+      invalid_count: preview.filter((p) => !p.valid).length,
+      rows: preview,
+      available_departments: departmentsMap.map((d) => ({
+        department_id: d.department_id,
+        name: d.name,
+      })),
+    });
+  } catch (err) {
+    console.error("Preview Employee Import Error:", err);
+    return res.status(500).json({
+      message: "حدث خطأ أثناء قراءة ملف الموظفين",
+    });
+  }
+};
+
+// =========================================================
+// CONFIRM EMPLOYEES EXCEL IMPORT
+// =========================================================
+
+exports.confirmEmployeeImport = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const { employees: items } = req.body;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      client.release();
+      return res.status(400).json({
+        message: "لا يوجد بيانات لاستيرادها",
+      });
+    }
+
+    await client.query("BEGIN");
+
+    const created = [];
+    const failed = [];
+
+    for (const item of items) {
+      try {
+        const name = String(item.name || "").trim();
+        const email = String(item.email || "").trim().toLowerCase();
+        const departmentId = Number(item.department_id);
+        const position = item.position
+          ? String(item.position).trim()
+          : null;
+        const role = ["employee", "admin"].includes(item.role)
+          ? item.role
+          : "employee";
+        const password = String(item.password || "");
+
+        if (!name || !email || !departmentId || password.length < 6) {
+          failed.push({ email, reason: "بيانات ناقصة أو غير صالحة" });
+          continue;
+        }
+
+        const emailCheck = await client.query(
+          `SELECT employee_id FROM employees WHERE LOWER(TRIM(email)) = $1 LIMIT 1`,
+          [email]
+        );
+
+        if (emailCheck.rows.length > 0) {
+          failed.push({ email, reason: "البريد مستخدم مسبقاً" });
+          continue;
+        }
+
+        const deptResult = await client.query(
+          `SELECT department_id, name FROM departments WHERE department_id = $1 AND is_deleted = 0 LIMIT 1`,
+          [departmentId]
+        );
+
+        if (deptResult.rows.length === 0) {
+          failed.push({ email, reason: "القسم غير صالح" });
+          continue;
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const result = await client.query(
+          `
+          INSERT INTO employees
+            (name, department_id, department, position, email, password, role, is_deleted)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, 0)
+          RETURNING employee_id, name, email
+          `,
+          [
+            name,
+            deptResult.rows[0].department_id,
+            deptResult.rows[0].name,
+            position,
+            email,
+            hashedPassword,
+            role,
+          ]
+        );
+
+        created.push({
+          ...result.rows[0],
+          password, // ترجع مرة واحدة فقط لتسليمها للموظف
+        });
+      } catch (rowErr) {
+        console.error("Import Row Error:", rowErr);
+        failed.push({ email: item.email, reason: "خطأ غير متوقع" });
+      }
+    }
+
+    await client.query("COMMIT");
+
+    return res.json({
+      message: `تم إضافة ${created.length} موظف بنجاح${
+        failed.length ? ` (فشل ${failed.length})` : ""
+      }`,
+      created,
+      failed,
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Confirm Employee Import Error:", err);
+    return res.status(500).json({
+      message: "حدث خطأ أثناء تنفيذ الاستيراد",
+    });
+  } finally {
+    client.release();
+  }
+};
 
