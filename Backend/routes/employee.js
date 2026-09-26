@@ -93,7 +93,7 @@ employeeRouter.get("/job-descriptions", isAdmin, getJobDescriptions);
 employeeRouter.put("/:id/job-description", isAdmin, updateJobDescription);
 employeeRouter.delete("/:id/job-description", isAdmin, deleteJobDescription);
 
-employeeRouter.get("/job-descriptions/trash", verifyAdmin, getJobDescriptionTrash);
+employeeRouter.get("/job-descriptions/trash", isAdmin, getJobDescriptionTrash);
 employeeRouter.put(
   "/job-descriptions/trash/:trashId/restore",
   isAdmin,
