@@ -125,14 +125,14 @@ employeeRouter.delete(
   permanentlyDeleteJobDescription,
 );
 
-router.post(
+employeeRouter.post(
   "/job-descriptions/import/preview",
   isAdmin,
   upload.single("file"),
   previewJobDescriptionImport,
 );
 
-router.put(
+employeeRouter.put(
   "/job-descriptions/import/confirm",
   isAdmin,
   confirmJobDescriptionImport,
