@@ -49,7 +49,7 @@ exports.createEvaluation = async (req, res) => {
       totalPersonality +
       totalRelations;
 
-    const maxTotal = 104;
+    const maxTotal = 100;
 
     const percentage = (total / maxTotal) * 100;
 
@@ -451,7 +451,7 @@ exports.updateEvaluation = async (req, res) => {
     // حتى يكون الحساب موحداً
     // =========================
 
-    const maxTotal = 104;
+    const maxTotal = 100;
 
     const percentage =
       (total / maxTotal) * 100;
