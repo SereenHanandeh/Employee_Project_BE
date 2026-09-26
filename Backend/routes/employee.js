@@ -18,6 +18,8 @@ const {
   getJobDescriptionTrash,
   restoreJobDescription,
   permanentlyDeleteJobDescription,
+  previewJobDescriptionImport,
+  confirmJobDescriptionImport,
   previewEmployeeImport,
   confirmEmployeeImport,
 } = require("../controllers/employee");
@@ -28,16 +30,16 @@ const isAdmin = require("../middleware/isAdmin");
 const multer = require("multer");
 
 // =========================================================
-// UPLOAD - ملفات Excel (استيراد الموظفين)
+// UPLOAD - ملفات Excel (تستخدم لاستيراد الموظفين واستيراد الوصف الوظيفي)
 // =========================================================
 
 const uploadExcel = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = [
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
-      "application/vnd.ms-excel", // .xls
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-excel",
     ];
 
     if (allowed.includes(file.mimetype)) {
@@ -53,65 +55,20 @@ const uploadExcel = multer({
 // =========================================================
 
 employeeRouter.get("/me", auth, getMe);
-
-// =========================================================
-// MARK WELCOME AS SEEN
-// =========================================================
-
 employeeRouter.put("/me/welcome", auth, markWelcomeSeen);
-
-// =========================================================
-// UPDATE MY PROFILE
-// =========================================================
-
 employeeRouter.put("/me", auth, updateMyProfile);
-
-// =========================================================
-// CHANGE MY PASSWORD
-// =========================================================
-
 employeeRouter.put("/me/password", auth, changeMyPassword);
 
 // =========================================================
-// ACTIVE EMPLOYEES
+// ACTIVE / ALL EMPLOYEES
 // =========================================================
 
 employeeRouter.get("/active", auth, isAdmin, getActiveEmployees);
-
-// =========================================================
-// ALL EMPLOYEES
-// =========================================================
-
 employeeRouter.get("/", auth, isAdmin, getEmployees);
-
-// =========================================================
-// CREATE EMPLOYEE
-// =========================================================
-
 employeeRouter.post("/", auth, isAdmin, createEmployee);
-
-// =========================================================
-// DELETE EMPLOYEE
-// =========================================================
-
 employeeRouter.delete("/:id/delete", auth, isAdmin, deleteEmployee);
-
-// =========================================================
-// UPDATE EMPLOYEE
-// =========================================================
-
 employeeRouter.put("/:id/update", auth, isAdmin, updateEmployee);
-
-// =========================================================
-// RESTORE EMPLOYEE
-// =========================================================
-
 employeeRouter.put("/:id/restore", auth, isAdmin, restoreEmployee);
-
-// =========================================================
-// DELETED EMPLOYEES
-// =========================================================
-
 employeeRouter.get("/deleted", auth, isAdmin, getDeletedEmployees);
 
 // =========================================================
@@ -150,7 +107,6 @@ employeeRouter.post(
   isAdmin,
   confirmJobDescriptionImport,
 );
-
 
 // =========================================================
 // EMPLOYEES IMPORT (Excel)
