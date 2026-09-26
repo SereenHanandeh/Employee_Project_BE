@@ -135,6 +135,24 @@ employeeRouter.delete(
 );
 
 // =========================================================
+// JOB DESCRIPTION IMPORT (Excel)
+// =========================================================
+
+employeeRouter.post(
+  "/job-description/import/preview",
+  isAdmin,
+  uploadExcel.single("file"),
+  previewJobDescriptionImport,
+);
+
+employeeRouter.post(
+  "/job-description/import/confirm",
+  isAdmin,
+  confirmJobDescriptionImport,
+);
+
+
+// =========================================================
 // EMPLOYEES IMPORT (Excel)
 // =========================================================
 

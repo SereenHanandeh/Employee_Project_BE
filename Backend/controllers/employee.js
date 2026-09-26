@@ -2073,3 +2073,256 @@ exports.confirmEmployeeImport = async (req, res) => {
   }
 };
 
+// =========================================================
+// HELPER - تعبئة الخلايا الفارغة بالقيمة السابقة (Fill Down)
+// مفيدة لأن خلايا الإكسل المدمجة (merged cells) تطلع فاضية
+// في كل الصفوف عدا الصف الأول من الدمج
+// =========================================================
+
+const fillDownColumn = (rows, colIndex, startRow) => {
+  if (colIndex === -1) return;
+
+  let lastValue = "";
+
+  for (let r = startRow; r < rows.length; r++) {
+    const value = String(rows[r][colIndex] || "").trim();
+
+    if (value) {
+      lastValue = value;
+    } else {
+      rows[r][colIndex] = lastValue;
+    }
+  }
+};
+
+// =========================================================
+// PREVIEW JOB DESCRIPTION EXCEL IMPORT
+// =========================================================
+
+exports.previewJobDescriptionImport = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        message: "الرجاء رفع ملف إكسل",
+      });
+    }
+
+    let rows;
+
+    try {
+      rows = excelBufferToRows(req.file.buffer);
+    } catch (e) {
+      return res.status(400).json({
+        message: "تعذر قراءة الملف، تأكد أنه ملف إكسل صالح",
+      });
+    }
+
+    rows = rows.filter((row) =>
+      row.some((cell) => String(cell || "").trim() !== "")
+    );
+
+    if (rows.length < 2) {
+      return res.status(400).json({
+        message: "الملف فارغ أو لا يحتوي على بيانات",
+      });
+    }
+
+    const headerRow = rows[0];
+
+    const nameIdx = findColumnIndex(headerRow, ["الاسم", "اسم الموظف", "name"]);
+    const emailIdx = findColumnIndex(headerRow, ["البريد", "الإيميل", "email"]);
+    const pointIdx = findColumnIndex(headerRow, [
+       "المهام الموكلة",
+      "نقطة الوصف الوظيفي",
+      "الوصف الوظيفي",
+      "نقطة",
+    ]);
+
+    if (nameIdx === -1 || pointIdx === -1) {
+      return res.status(400).json({
+        message:
+          "لم يتم العثور على عمود 'الاسم' أو عمود 'نقطة الوصف الوظيفي'. تأكد من رؤوس الأعمدة.",
+      });
+    }
+
+    const dataRows = rows.slice(1);
+
+    // تعويض الخلايا الفارغة الناتجة عن الدمج (merged cells)
+    [nameIdx, emailIdx].forEach((idx) => {
+      fillDownColumn(dataRows, idx, 0);
+    });
+
+    const cleanRows = dataRows.filter((row) =>
+      row.some((cell) => String(cell || "").trim() !== "")
+    );
+
+    const groups = [];
+    let currentGroup = null;
+
+    cleanRows.forEach((row) => {
+      const rawName = String(row[nameIdx] || "").trim();
+      const rawEmail = emailIdx !== -1 ? String(row[emailIdx] || "").trim() : "";
+      const point = String(row[pointIdx] || "").trim();
+
+      const key = `${rawName}|${rawEmail}`;
+
+      if (!currentGroup || currentGroup.key !== key) {
+        currentGroup = {
+          key,
+          raw_name: rawName,
+          raw_email: rawEmail,
+          points: [],
+        };
+
+        groups.push(currentGroup);
+      }
+
+      if (point && point !== "لا يوجد وصف وظيفي") {
+        currentGroup.points.push(point);
+      }
+    });
+
+    if (groups.length === 0) {
+      return res.status(400).json({
+        message: "لم يتم العثور على بيانات صالحة داخل الملف",
+      });
+    }
+
+    const employeesResult = await pool.query(`
+      SELECT employee_id, name, email
+      FROM employees
+      WHERE is_deleted = 0
+    `);
+
+    const normalize = (str) =>
+      String(str || "").trim().toLowerCase().replace(/\s+/g, " ");
+
+    const employeesList = employeesResult.rows.map((e) => ({
+      employee_id: e.employee_id,
+      name: e.name,
+      email: e.email,
+      normalized_name: normalize(e.name),
+      normalized_email: normalize(e.email),
+    }));
+
+    const preview = groups.map((group) => {
+      const normalizedEmail = normalize(group.raw_email);
+      const normalizedName = normalize(group.raw_name);
+
+      let matched = normalizedEmail
+        ? employeesList.find((e) => e.normalized_email === normalizedEmail)
+        : null;
+
+      let matchType = matched ? "email" : null;
+
+      if (!matched) {
+        matched = employeesList.find(
+          (e) => e.normalized_name === normalizedName
+        );
+        matchType = matched ? "exact_name" : null;
+      }
+
+      if (!matched) {
+        matched = employeesList.find(
+          (e) =>
+            e.normalized_name.includes(normalizedName) ||
+            normalizedName.includes(e.normalized_name)
+        );
+        matchType = matched ? "partial_name" : "none";
+      }
+
+      return {
+        raw_name: group.raw_name,
+        raw_email: group.raw_email,
+        points: group.points,
+        matched_employee_id: matched?.employee_id || null,
+        matched_employee_name: matched?.name || null,
+        match_type: matchType || "none",
+      };
+    });
+
+    return res.json({
+      total_rows: preview.length,
+      matched_count: preview.filter((p) => p.matched_employee_id).length,
+      unmatched_count: preview.filter((p) => !p.matched_employee_id).length,
+      rows: preview,
+      available_employees: employeesList.map((e) => ({
+        employee_id: e.employee_id,
+        name: e.name,
+      })),
+    });
+  } catch (err) {
+    console.error("Preview Job Description Import Error:", err);
+    return res.status(500).json({
+      message: "حدث خطأ أثناء قراءة ملف الإكسل",
+    });
+  }
+};
+
+// =========================================================
+// CONFIRM IMPORT (تطبيق التحديثات بعد المعاينة)
+// =========================================================
+
+exports.confirmJobDescriptionImport = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const { items } = req.body;
+    // items = [{ employee_id, points: [...] }]
+
+    if (!Array.isArray(items) || items.length === 0) {
+      client.release();
+      return res.status(400).json({
+        message: "لا يوجد بيانات لاستيرادها",
+      });
+    }
+
+    await client.query("BEGIN");
+
+    const updated = [];
+
+    for (const item of items) {
+      const employeeId = Number(item.employee_id);
+
+      if (!Number.isInteger(employeeId) || employeeId <= 0) continue;
+
+      const cleanPoints = Array.isArray(item.points)
+        ? item.points
+            .map((p) => String(p).trim())
+            .filter((p) => p.length > 0)
+        : [];
+
+      if (cleanPoints.length === 0) continue;
+
+      const result = await client.query(
+        `
+        UPDATE employees
+        SET job_description = $1
+        WHERE employee_id = $2
+          AND is_deleted = 0
+        RETURNING employee_id, name
+        `,
+        [JSON.stringify(cleanPoints), employeeId]
+      );
+
+      if (result.rows.length > 0) {
+        updated.push(result.rows[0]);
+      }
+    }
+
+    await client.query("COMMIT");
+
+    return res.json({
+      message: `تم تحديث الوصف الوظيفي لـ ${updated.length} موظف بنجاح`,
+      updated,
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Confirm Job Description Import Error:", err);
+    return res.status(500).json({
+      message: "حدث خطأ أثناء تطبيق الاستيراد",
+    });
+  } finally {
+    client.release();
+  }
+};
